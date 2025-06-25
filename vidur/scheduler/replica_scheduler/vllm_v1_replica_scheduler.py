@@ -166,7 +166,9 @@ class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
                     num_new_tokens = self._cache_config.block_size
                     computed_blocks.pop()
                 num_new_tokens = min(num_new_tokens, token_budget)
-                assert num_new_tokens > 0, f"num_new_tokens should be greater than 0 but got {num_new_tokens}"
+                assert (
+                    num_new_tokens > 0
+                ), f"num_new_tokens should be greater than 0 but got {num_new_tokens}"
 
                 new_blocks = self._kv_cache_manager.allocate_slots(
                     request, num_new_tokens, computed_blocks

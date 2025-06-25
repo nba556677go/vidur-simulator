@@ -3,10 +3,10 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import wandb
 from ddsketch.ddsketch import DDSketch
 from matplotlib import pyplot as plt
 
-import wandb
 from vidur.logger import init_logger
 
 logger = init_logger(__name__)

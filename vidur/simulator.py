@@ -5,6 +5,7 @@ import zipfile
 from typing import List
 
 import wandb
+
 from vidur.config import SimulationConfig
 from vidur.entities import Cluster
 from vidur.events import BaseEvent, RequestArrivalEvent

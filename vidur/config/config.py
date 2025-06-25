@@ -1,10 +1,10 @@
 import json
 import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import ceil
-import sys
 from typing import List, Optional
 
 from vidur.config.base_poly_config import BasePolyConfig
@@ -481,7 +481,9 @@ class MetricsConfig:
     )
     keep_individual_batch_metrics: bool = field(
         default=False,
-        metadata={"help": "Whether to keep individual batch metrics. This can lead to large disk usage."},
+        metadata={
+            "help": "Whether to keep individual batch metrics. This can lead to large disk usage."
+        },
     )
     subsamples: Optional[int] = field(
         default=None,

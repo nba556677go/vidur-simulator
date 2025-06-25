@@ -146,13 +146,13 @@ class CapacitySearch:
                 # stopping condition - we have reached the minimum granularity
                 if abs(left - right) < self.args.min_search_granularity * right / 100:
                     break
-                
+
                 if right < self.args.min_qps:
                     logger.warning(
                         f"Right limit {right} is less than minimum search QPS {self.args.min_qps}. Stopping search."
                     )
                     break
-                
+
                 qps = (left + right) / 2
 
                 is_under_sla = self.is_under_sla(

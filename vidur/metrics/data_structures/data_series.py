@@ -4,9 +4,9 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import wandb
 from matplotlib import pyplot as plt
 
-import wandb
 from vidur.logger import init_logger
 
 logger = init_logger(__name__)

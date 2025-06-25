@@ -4,8 +4,8 @@ import os
 from typing import Dict, List
 
 import pandas as pd
-
 import wandb
+
 from vidur.config import SimulationConfig
 from vidur.entities.batch import Batch
 from vidur.entities.replica import Replica
