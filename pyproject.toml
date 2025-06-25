@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ddsketch==3.0.1",
     "fasteners==0.17.3",
-    "jupyterlab==4.2.3",
+    "jupyterlab==4.2.5",
     "kaleido==0.2.1",
     "matplotlib==3.9.0",
     "numpy==1.26.4",
