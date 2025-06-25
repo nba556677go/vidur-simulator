@@ -15,7 +15,7 @@ dependencies = [
     "plotly-express==0.4.1",
     "pyyaml==6.0.1",
     "randomname==0.2.1",
-    "ray==2.31.0",
+    "ray==2.43.0",
     "scikit-learn==1.5.0",
     "seaborn==0.13.2",
     "snakeviz==2.2.0",
