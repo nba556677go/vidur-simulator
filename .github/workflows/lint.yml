@@ -16,10 +16,11 @@ jobs:
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@v3
-      - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          environment-file: environment-dev.yml
+          # Install a specific version of uv.
+          version: "0.7.3"
       - name: "Run black lint"
         run: make lint/black
       - name: "Run isort check"
