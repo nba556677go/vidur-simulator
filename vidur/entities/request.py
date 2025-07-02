@@ -51,9 +51,11 @@ class Request(BaseEntity):
                 + num_decode_tokens
                 - (block_size * len(block_hash_ids))
             )
+            # When last_block_size is 0, it means all blocks are perfectly filled
+            # When last_block_size > 0, it should be less than block_size (partial block)
             assert (
-                last_block_size >= 0 and last_block_size < block_size
-            ), f"{last_block_size} is not in the range [0, {block_size})"
+                last_block_size >= 0 and (last_block_size == 0 or last_block_size < block_size)
+            ), f"{last_block_size} is not valid: should be 0 (perfectly filled) or in range (0, {block_size})"
 
         self._id = Request.generate_id()
         self._arrived_at = arrived_at

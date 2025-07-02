@@ -1,0 +1,14 @@
+{
+    "model": "Qwen/Qwen3-8B",
+    "prompts_file": "../../prompts/prompt_extend_4000_numprompts100.txt",
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 8,
+    "max_num_batched_tokens": 80000,
+    "concurrency": 20,
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "output_dir": "./benchmark_runs",
+    "run_dir": "/home/ec2-user/s3-local/benchmarks/llm/vllm/latency/benchmark_runs/Qwen_Qwen3-8B/run_20250628_025508"
+}

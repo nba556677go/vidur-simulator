@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import json
 import sys
 
 # --- 1. Data Preparation ---
@@ -20,6 +21,9 @@ try:
 except FileNotFoundError:
     print(f"Error: Input file not found at {input_file}")
     sys.exit(1)
+
+if "block_hash_ids" in df.columns:
+    df["block_hash_ids"] = df["block_hash_ids"].apply(json.loads)
 
 
 # --- 2. Scaling Logic Definition ---
@@ -59,6 +63,20 @@ scaled_prefill.loc[zero_decode_mask] = (scaled_prefill.loc[zero_decode_mask] - 1
 df['num_prefill_tokens'] = scaled_prefill
 df['num_decode_tokens'] = scaled_decode
 
+if "block_hash_ids" in df.columns:
+    def _truncate_block_ids(row):
+        block_ids = row["block_hash_ids"]
+        if not isinstance(block_ids, list):
+            return block_ids
+        block_size = row["block_size"] if "block_size" in row else 16
+        block_size = int(block_size)
+        total_tokens = int(row["num_prefill_tokens"] + row["num_decode_tokens"])
+        num_blocks = int(total_tokens // block_size)
+        return block_ids[:num_blocks]
+
+    df["block_hash_ids"] = df.apply(_truncate_block_ids, axis=1)
+
+
 #assert df['num_decode_tokens'] > 0
 # --- 5. Display and Save Results ---
 # The DataFrame now has the same columns as the input, but with scaled values.
@@ -66,6 +84,9 @@ print(f"Scaling token counts to a max total length of {MAX_TOKEN_LENGTH}")
 print("Ensuring 'num_decode_tokens' is always greater than 0.")
 print("Displaying the first 10 rows of the modified data (original columns are overwritten):")
 print(df.head(10).to_string())
+
+if "block_hash_ids" in df.columns:
+    df["block_hash_ids"] = df["block_hash_ids"].apply(json.dumps)
 
 # Save the modified DataFrame to a new CSV file.
 # The output file will have the exact same columns as the input.

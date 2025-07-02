@@ -166,6 +166,7 @@ cache_random_forrest
 cache_linear_regression
 cache*
 simulator_outputs
+simulator_output
 wandb
 train.zip
 profiling_outputs
@@ -182,3 +183,9 @@ experiments/miscellaneous/request_length_trace_analysis.ipynb
 vidur/config_optimizer/config_explorer/config/config_llama3_8b.yml
 experiments/global_scheduler/get_uniform_trace.ipynb
 prefill_throughput_output
+
+#prompts dataset
+benchmarks/llm/prompts/lmsys-chat-1m
+benchmarks/llm/vllm/latency/sweep_configs
+#all *.png
+*.png

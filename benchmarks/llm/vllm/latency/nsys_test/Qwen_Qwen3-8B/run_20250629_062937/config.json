@@ -1,0 +1,15 @@
+{
+    "model": "Qwen/Qwen3-8B",
+    "prompts_file": "../../prompts/prompt_extend_4000_numprompt1.txt",
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 1,
+    "max_num_batched_tokens": 4096,
+    "concurrency": 1,
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "output_dir": "nsys_test/",
+    "download_dir": "/home/ec2-user/.cache/huggingface/",
+    "run_dir": "/home/ec2-user/s3-local/benchmarks/llm/vllm/latency/nsys_test/Qwen_Qwen3-8B/run_20250629_062937"
+}
