@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install basic Python packages
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel pandas
 
 # Install PyTorch with CUDA support
 # Using PyTorch 2.2.x which is compatible with CUDA 12.x

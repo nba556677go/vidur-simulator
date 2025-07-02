@@ -92,10 +92,10 @@ if __name__ == "__main__":
    
     
     # 3. Target token length for each prompt
-    TOKEN_LENGTH = 4000
+    TOKEN_LENGTH = 30
 
 
-    num_prompts=20
+    num_prompts=150
     # 2. The desired name for your vllm prompt file
     output_prompt_file = f'prompt_extend_{TOKEN_LENGTH}_numprompts{num_prompts}.txt'
     

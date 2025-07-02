@@ -52,9 +52,9 @@ if __name__ == "__main__":
     # --- Configuration ---
     # The name of one of your Parquet files
     source_parquet_file = 'lmsys-chat-1m/data/train-00000-of-00006-4feeb3f83346a0e9.parquet'
-    
+    num_prompts = 150
     # The desired name for your vllm prompt file
-    output_prompt_file = 'prompt_4000.txt'
+    output_prompt_file = f'prompt_numprompts{num_prompts}.txt'
     
     # --- Execution ---
-    save_prompts_for_vllm(source_parquet_file, output_prompt_file, num_prompts=100)
+    save_prompts_for_vllm(source_parquet_file, output_prompt_file, num_prompts=num_prompts)

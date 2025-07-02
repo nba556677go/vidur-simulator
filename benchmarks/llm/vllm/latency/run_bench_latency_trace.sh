@@ -31,9 +31,11 @@ CONCURRENCY=1
 TOTAL_GPUS=8
 OUTPUT_DIR="./vidur_test"
 TRACE="./vidur_output/request_metrics.csv"
+PROMPT_TEMPLATE="../../prompts/prompt_numprompts150.txt" #still have bug. skip now
+#
 # Base command for the Python benchmark script
+#BASE_CMD="python3 bench_latency.py --model $MODEL_NAME --trace $TRACE --concurrency $CONCURRENCY --output-dir $OUTPUT_DIR --prompt-templates-file $PROMPT_TEMPLATE"
 BASE_CMD="python3 bench_latency.py --model $MODEL_NAME --trace $TRACE --concurrency $CONCURRENCY --output-dir $OUTPUT_DIR"
-
 # --- Iteration Values ---
 
 # Valid Tensor Parallelism (tp) sizes to test
