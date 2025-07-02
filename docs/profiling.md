@@ -97,7 +97,10 @@ Currently available data include:
         python vidur/profiling/collectives/main.py \
         --num_workers_per_node_combinations 1,2,4,8 \
         --collective all_reduce
+    #if does not work
+    python -m vidur.profiling.collectives.main    --num_workers_per_node_combinations 1 2 4 8     --collective all_reduce
     ```
+    
 
     - One may need to adjust `--num_workers_per_node_combinations` depending on the number of GPUs in the node eg. `--num_workers_per_node_combinations 1,2,4` for Azure Standard_NC96ads_A100_v4 node.
     - Copy the CSV file from `profiling_outputs/collectives/<timestamp>/all_reduce.csv` to `data/profiling/network/{network_device}/allreduce.csv`.
