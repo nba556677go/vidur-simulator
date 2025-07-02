@@ -69,8 +69,9 @@ if "block_hash_ids" in df.columns:
         if not isinstance(block_ids, list):
             return block_ids
         block_size = row["block_size"] if "block_size" in row else 16
-        total_tokens = row["num_prefill_tokens"] + row["num_decode_tokens"]
-        num_blocks = total_tokens // block_size
+        block_size = int(block_size)
+        total_tokens = int(row["num_prefill_tokens"] + row["num_decode_tokens"])
+        num_blocks = int(total_tokens // block_size)
         return block_ids[:num_blocks]
 
     df["block_hash_ids"] = df.apply(_truncate_block_ids, axis=1)
