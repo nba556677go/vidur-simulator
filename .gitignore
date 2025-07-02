@@ -187,5 +187,8 @@ prefill_throughput_output
 #prompts dataset
 benchmarks/llm/prompts/lmsys-chat-1m
 benchmarks/llm/vllm/latency/sweep_configs
-#all *.png
 *.png
+
+#remove .sqlite, .nsys-rep
+*.sqlite
+*.nsys-rep
