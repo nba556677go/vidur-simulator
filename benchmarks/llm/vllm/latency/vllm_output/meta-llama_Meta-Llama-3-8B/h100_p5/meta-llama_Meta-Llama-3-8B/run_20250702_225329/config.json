@@ -1,0 +1,16 @@
+{
+    "prompts_file": null,
+    "trace": "./vidur_output/request_metrics.csv",
+    "model": "meta-llama/Meta-Llama-3-8B",
+    "download_dir": null,
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 1,
+    "max_num_batched_tokens": 4096,
+    "concurrency": 1,
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "nsys": false,
+    "output_dir": "./sweep_configs"
+}

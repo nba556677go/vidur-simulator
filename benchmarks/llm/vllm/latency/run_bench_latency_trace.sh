@@ -39,16 +39,16 @@ BASE_CMD="python3 bench_latency.py --model $MODEL_NAME --trace $TRACE --concurre
 # --- Iteration Values ---
 
 # Valid Tensor Parallelism (tp) sizes to test
-TP_VALUES=(1 2 4 8)
-#TP_VALUES=(1)
+#TP_VALUES=(1 2 4 8)
+TP_VALUES=(1)
 # Valid Data Parallelism (dp) sizes to test
-DP_VALUES=(1 2 4 8)
-#DP_VALUES=(8)
+#DP_VALUES=(1 2 4 8)
+DP_VALUES=(1 8)
 
 # Define a specific set of 4 values for max-num-batched-tokens to test.
 # This samples performance across the requested range of 4096 to 75360.
 #TOKEN_BATCH_VALUES=(4096 20480 40960 73728)
-TOKEN_BATCH_VALUES=(4096 8192)
+TOKEN_BATCH_VALUES=(4096)
 
 
 # --- Main Loop ---
