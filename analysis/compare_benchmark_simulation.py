@@ -31,7 +31,7 @@ def calculate_percentiles(data: List[float], percentiles: List[int] = [50, 95, 9
     return result
 
 
-def read_benchmark_json(json_file_path: str) -> Tuple[List[float], List[float]]:
+def read_benchmark_json(json_file_path: str) -> Tuple[List[float], List[float], List[float]]:
     """Read benchmark JSON file and extract latency data."""
     with open(json_file_path, 'r') as f:
         data = json.load(f)
@@ -42,17 +42,22 @@ def read_benchmark_json(json_file_path: str) -> Tuple[List[float], List[float]]:
     
     total_latencies = []
     time_to_first_tokens = []
+    decode_times = []
     
     for request in individual_requests:
-        if 'total_latency' in request:
-            total_latencies.append(float(request['total_latency']))
-        if 'time_to_first_token' in request:
-            time_to_first_tokens.append(float(request['time_to_first_token']))
+        if 'total_latency' in request and 'time_to_first_token' in request:
+            total_latency = float(request['total_latency'])
+            ttft = float(request['time_to_first_token'])
+            decode_time = total_latency - ttft
+            
+            total_latencies.append(total_latency)
+            time_to_first_tokens.append(ttft)
+            decode_times.append(decode_time)
     
-    return total_latencies, time_to_first_tokens
+    return total_latencies, time_to_first_tokens, decode_times
 
 
-def read_simulation_csv(csv_file_path: str) -> Tuple[List[float], List[float]]:
+def read_simulation_csv(csv_file_path: str) -> Tuple[List[float], List[float], List[float]]:
     """Read simulation CSV file and extract latency data."""
     df = pd.read_csv(csv_file_path)
     
@@ -62,7 +67,13 @@ def read_simulation_csv(csv_file_path: str) -> Tuple[List[float], List[float]]:
     # Extract prefill_e2e_time (corresponds to time_to_first_token)
     prefill_e2e_times = df['prefill_e2e_time'].dropna().tolist()
     
-    return request_e2e_times, prefill_e2e_times
+    # Calculate decode times (total - prefill)
+    decode_times = []
+    for i, (total, prefill) in enumerate(zip(request_e2e_times, prefill_e2e_times)):
+        if pd.notna(total) and pd.notna(prefill):
+            decode_times.append(total - prefill)
+    
+    return request_e2e_times, prefill_e2e_times, decode_times
 
 
 def plot_cdf(data1: List[float], data2: List[float], labels: List[str], 
@@ -122,7 +133,7 @@ def plot_cdf(data1: List[float], data2: List[float], labels: List[str],
 
 
 def plot_all_cdfs(results: Dict, output_dir: Optional[str] = None):
-    """Plot CDFs for both total latency and TTFT comparisons."""
+    """Plot CDFs for total latency, TTFT, and decode time comparisons."""
     
     # Total Latency CDF
     bench_total = results['benchmark']['total_latency']['data']
@@ -156,6 +167,172 @@ def plot_all_cdfs(results: Dict, output_dir: Optional[str] = None):
         'Time to First Token (seconds)',
         ttft_path
     )
+    
+    # Decode Time CDF
+    bench_decode = results['benchmark']['decode_time']['data']
+    sim_decode = results['simulation']['decode_time']['data']
+    
+    decode_path = None
+    if output_dir:
+        decode_path = Path(output_dir) / "decode_time_cdf.png"
+    
+    plot_cdf(
+        bench_decode, sim_decode,
+        ['Benchmark', 'Simulation'],
+        'Decode Time CDF Comparison',
+        'Decode Time (seconds)',
+        decode_path
+    )
+
+
+def export_results_to_csv(results: Dict, percentiles: List[int], output_path: str):
+    """Export comparison results to CSV format."""
+    
+    # Prepare data for CSV export
+    csv_data = []
+    
+    # Add percentile comparisons for Total Latency
+    for p in percentiles:
+        p_key = f"p{p}"
+        bench_val = results['benchmark']['total_latency']['percentiles'][p_key]
+        sim_val = results['simulation']['total_latency']['percentiles'][p_key]
+        diff = sim_val - bench_val
+        diff_pct = (diff / bench_val * 100) if bench_val != 0 else 0
+        
+        csv_data.append({
+            'Metric': 'Total Latency',
+            'Percentile': f'P{p}',
+            'Benchmark_Value_s': bench_val,
+            'Simulation_Value_s': sim_val,
+            'Absolute_Diff_s': diff,
+            'Percent_Diff': diff_pct,
+            'Benchmark_Value_ms': bench_val * 1000,
+            'Simulation_Value_ms': sim_val * 1000,
+            'Absolute_Diff_ms': diff * 1000
+        })
+    
+    # Add percentile comparisons for TTFT  
+    for p in percentiles:
+        p_key = f"p{p}"
+        bench_val = results['benchmark']['ttft']['percentiles'][p_key]
+        sim_val = results['simulation']['ttft']['percentiles'][p_key]
+        diff = sim_val - bench_val
+        diff_pct = (diff / bench_val * 100) if bench_val != 0 else 0
+        
+        csv_data.append({
+            'Metric': 'Time to First Token',
+            'Percentile': f'P{p}',
+            'Benchmark_Value_s': bench_val,
+            'Simulation_Value_s': sim_val,
+            'Absolute_Diff_s': diff,
+            'Percent_Diff': diff_pct,
+            'Benchmark_Value_ms': bench_val * 1000,
+            'Simulation_Value_ms': sim_val * 1000,
+            'Absolute_Diff_ms': diff * 1000
+        })
+    
+    # Add percentile comparisons for Decode Time
+    for p in percentiles:
+        p_key = f"p{p}"
+        bench_val = results['benchmark']['decode_time']['percentiles'][p_key]
+        sim_val = results['simulation']['decode_time']['percentiles'][p_key]
+        diff = sim_val - bench_val
+        diff_pct = (diff / bench_val * 100) if bench_val != 0 else 0
+        
+        csv_data.append({
+            'Metric': 'Decode Time',
+            'Percentile': f'P{p}',
+            'Benchmark_Value_s': bench_val,
+            'Simulation_Value_s': sim_val,
+            'Absolute_Diff_s': diff,
+            'Percent_Diff': diff_pct,
+            'Benchmark_Value_ms': bench_val * 1000,
+            'Simulation_Value_ms': sim_val * 1000,
+            'Absolute_Diff_ms': diff * 1000
+        })
+    
+    # Add summary statistics
+    summary_stats = [
+        ('Total Latency', 'total_latency'),
+        ('Time to First Token', 'ttft'),
+        ('Decode Time', 'decode_time')
+    ]
+    
+    for metric_name, metric_key in summary_stats:
+        bench_data = results['benchmark'][metric_key]
+        sim_data = results['simulation'][metric_key]
+        
+        # Mean comparison
+        mean_diff = sim_data['mean'] - bench_data['mean']
+        mean_diff_pct = (mean_diff / bench_data['mean'] * 100) if bench_data['mean'] != 0 else 0
+        
+        csv_data.append({
+            'Metric': metric_name,
+            'Percentile': 'Mean',
+            'Benchmark_Value_s': bench_data['mean'],
+            'Simulation_Value_s': sim_data['mean'],
+            'Absolute_Diff_s': mean_diff,
+            'Percent_Diff': mean_diff_pct,
+            'Benchmark_Value_ms': bench_data['mean'] * 1000,
+            'Simulation_Value_ms': sim_data['mean'] * 1000,
+            'Absolute_Diff_ms': mean_diff * 1000
+        })
+        
+        # Standard deviation comparison
+        std_diff = sim_data['std'] - bench_data['std']
+        std_diff_pct = (std_diff / bench_data['std'] * 100) if bench_data['std'] != 0 else 0
+        
+        csv_data.append({
+            'Metric': metric_name,
+            'Percentile': 'Std Dev',
+            'Benchmark_Value_s': bench_data['std'],
+            'Simulation_Value_s': sim_data['std'],
+            'Absolute_Diff_s': std_diff,
+            'Percent_Diff': std_diff_pct,
+            'Benchmark_Value_ms': bench_data['std'] * 1000,
+            'Simulation_Value_ms': sim_data['std'] * 1000,
+            'Absolute_Diff_ms': std_diff * 1000
+        })
+        
+        # Min/Max comparisons
+        bench_min = min(bench_data['data'])
+        sim_min = min(sim_data['data'])
+        min_diff = sim_min - bench_min
+        min_diff_pct = (min_diff / bench_min * 100) if bench_min != 0 else 0
+        
+        csv_data.append({
+            'Metric': metric_name,
+            'Percentile': 'Min',
+            'Benchmark_Value_s': bench_min,
+            'Simulation_Value_s': sim_min,
+            'Absolute_Diff_s': min_diff,
+            'Percent_Diff': min_diff_pct,
+            'Benchmark_Value_ms': bench_min * 1000,
+            'Simulation_Value_ms': sim_min * 1000,
+            'Absolute_Diff_ms': min_diff * 1000
+        })
+        
+        bench_max = max(bench_data['data'])
+        sim_max = max(sim_data['data'])
+        max_diff = sim_max - bench_max
+        max_diff_pct = (max_diff / bench_max * 100) if bench_max != 0 else 0
+        
+        csv_data.append({
+            'Metric': metric_name,
+            'Percentile': 'Max',
+            'Benchmark_Value_s': bench_max,
+            'Simulation_Value_s': sim_max,
+            'Absolute_Diff_s': max_diff,
+            'Percent_Diff': max_diff_pct,
+            'Benchmark_Value_ms': bench_max * 1000,
+            'Simulation_Value_ms': sim_max * 1000,
+            'Absolute_Diff_ms': max_diff * 1000
+        })
+    
+    # Convert to DataFrame and save
+    df = pd.DataFrame(csv_data)
+    df.to_csv(output_path, index=False, float_format='%.6f')
+    print(f"CSV results saved to: {output_path}")
 
 
 def compare_datasets(benchmark_file: str, simulation_file: str, percentiles: List[int] = [50, 95, 99]):
@@ -163,16 +340,18 @@ def compare_datasets(benchmark_file: str, simulation_file: str, percentiles: Lis
     
     # Read data
     print("Reading benchmark data...")
-    bench_total_lat, bench_ttft = read_benchmark_json(benchmark_file)
+    bench_total_lat, bench_ttft, bench_decode = read_benchmark_json(benchmark_file)
     
     print("Reading simulation data...")
-    sim_total_lat, sim_ttft = read_simulation_csv(simulation_file)
+    sim_total_lat, sim_ttft, sim_decode = read_simulation_csv(simulation_file)
     
     # Calculate percentiles
     bench_total_percentiles = calculate_percentiles(bench_total_lat, percentiles)
     bench_ttft_percentiles = calculate_percentiles(bench_ttft, percentiles)
+    bench_decode_percentiles = calculate_percentiles(bench_decode, percentiles)
     sim_total_percentiles = calculate_percentiles(sim_total_lat, percentiles)
     sim_ttft_percentiles = calculate_percentiles(sim_ttft, percentiles)
+    sim_decode_percentiles = calculate_percentiles(sim_decode, percentiles)
     
     # Print comparison
     print("\n" + "="*80)
@@ -211,6 +390,21 @@ def compare_datasets(benchmark_file: str, simulation_file: str, percentiles: Lis
         
         print(f"P{p:<9} {bench_val:<15.6f} {sim_val:<15.6f} {diff:<12.6f} {diff_pct:<10.2f}")
     
+    print("\n" + "-"*50)
+    print("DECODE TIME COMPARISON")
+    print("-"*50)
+    print(f"{'Percentile':<10} {'Benchmark (s)':<15} {'Simulation (s)':<15} {'Diff (s)':<12} {'Diff (%)':<10}")
+    print("-"*50)
+    
+    for p in percentiles:
+        p_key = f"p{p}"
+        bench_val = bench_decode_percentiles[p_key]
+        sim_val = sim_decode_percentiles[p_key]
+        diff = sim_val - bench_val
+        diff_pct = (diff / bench_val * 100) if bench_val != 0 else 0
+        
+        print(f"P{p:<9} {bench_val:<15.6f} {sim_val:<15.6f} {diff:<12.6f} {diff_pct:<10.2f}")
+    
     # Summary statistics
     print("\n" + "-"*50)
     print("SUMMARY STATISTICS")
@@ -228,6 +422,12 @@ def compare_datasets(benchmark_file: str, simulation_file: str, percentiles: Lis
     print(f"  Range - Benchmark: [{min(bench_ttft):.6f}, {max(bench_ttft):.6f}]")
     print(f"  Range - Simulation: [{min(sim_ttft):.6f}, {max(sim_ttft):.6f}]")
     
+    print("\nDecode Time:")
+    print(f"  Benchmark - Mean: {np.mean(bench_decode):.6f}s, Std: {np.std(bench_decode):.6f}s")
+    print(f"  Simulation - Mean: {np.mean(sim_decode):.6f}s, Std: {np.std(sim_decode):.6f}s")
+    print(f"  Range - Benchmark: [{min(bench_decode):.6f}, {max(bench_decode):.6f}]")
+    print(f"  Range - Simulation: [{min(sim_decode):.6f}, {max(sim_decode):.6f}]")
+    
     print("\n" + "="*80)
     
     # Return structured results
@@ -244,6 +444,12 @@ def compare_datasets(benchmark_file: str, simulation_file: str, percentiles: Lis
                 'percentiles': bench_ttft_percentiles,
                 'mean': np.mean(bench_ttft),
                 'std': np.std(bench_ttft)
+            },
+            'decode_time': {
+                'data': bench_decode,
+                'percentiles': bench_decode_percentiles,
+                'mean': np.mean(bench_decode),
+                'std': np.std(bench_decode)
             }
         },
         'simulation': {
@@ -258,6 +464,12 @@ def compare_datasets(benchmark_file: str, simulation_file: str, percentiles: Lis
                 'percentiles': sim_ttft_percentiles,
                 'mean': np.mean(sim_ttft),
                 'std': np.std(sim_ttft)
+            },
+            'decode_time': {
+                'data': sim_decode,
+                'percentiles': sim_decode_percentiles,
+                'mean': np.mean(sim_decode),
+                'std': np.std(sim_decode)
             }
         }
     }
@@ -294,9 +506,9 @@ def main():
         help='Generate CDF plots for visual comparison'
     )
     parser.add_argument(
-        '--plot-output-dir',
-        default='./plots',
-        help='Directory to save CDF plots (default: ./plots)'
+        '--output-dir',
+        default='./output',
+        help='Directory to save all output files (plots and CSV) (default: ./output)'
     )
     
     args = parser.parse_args()
@@ -336,7 +548,13 @@ def main():
         # Generate CDF plots if requested
         if args.plot_cdf:
             print("\nGenerating CDF plots...")
-            plot_all_cdfs(results, args.plot_output_dir)
+            plot_all_cdfs(results, args.output_dir)
+        
+        # Always export to CSV in the output directory
+        print("\nExporting results to CSV...")
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+        csv_output_path = Path(args.output_dir) / "comparison_results.csv"
+        export_results_to_csv(results, args.percentiles, str(csv_output_path))
             
     except Exception as e:
         print(f"Error: {e}")
