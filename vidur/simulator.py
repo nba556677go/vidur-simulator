@@ -16,12 +16,15 @@ from vidur.scheduler import GlobalSchedulerRegistry
 from vidur.scheduler.global_scheduler.base_global_scheduler import BaseGlobalScheduler
 from vidur.utils.json_encoder import JsonEncoder
 
-logger = init_logger(__name__)
+logger = init_logger(__name__, "debug")  # Set to debug initially for module-level logger
 
 
 class Simulator:
     def __init__(self, config: SimulationConfig) -> None:
         self._config: SimulationConfig = config
+        
+        # Update logger level from config
+        logger.setLevel(config.log_level.upper())
 
         self._time = 0
         self._time_limit_reached = False
@@ -57,6 +60,7 @@ class Simulator:
 
     def run(self) -> None:
         logger.info(f"Starting simulation with cluster: {self._cluster}")
+        logger.debug(f"Initial configuration: time_limit={self._time_limit}, seed={self._config.seed}")
 
         while not self._time_limit_reached and (
             self._event_queue
@@ -69,6 +73,7 @@ class Simulator:
             if (next_request_arrival_time is not None) and (
                 next_event_time is None or next_request_arrival_time <= next_event_time
             ):
+                logger.debug(f"Adding new request arrival event at time {next_request_arrival_time}")
                 self._add_event(
                     RequestArrivalEvent(
                         next_request_arrival_time,
@@ -79,8 +84,11 @@ class Simulator:
 
             event = self._event_queue[0]
             heapq.heappop(self._event_queue)
+            logger.debug(f"Processing event at time {event._time}: {event.__class__.__name__}")
             self._set_time(event._time)
             new_events = event.handle_event(self._scheduler, self._cluster_metric_store)
+            if new_events:
+                logger.debug(f"Event generated {len(new_events)} new events: {[e.__class__.__name__ for e in new_events]}")
             self._add_events(new_events)
 
             if self._config.metrics_config.write_json_trace:

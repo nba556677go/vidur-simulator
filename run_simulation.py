@@ -15,17 +15,30 @@ parser.add_argument(
 parser.add_argument(
     '--log_dir',
     type=str,
-    default='./simulation_logs',
+    default='./simulator_output',
     help='Base directory to save the log files. A timestamped subdirectory will be created here. Default is ./logs.'
+)
+parser.add_argument(
+    '--replica_config_device',
+    type=str,
+    default='a100',
+    help='Device type to use for replicas. Default is a100.'
+)
+parser.add_argument(
+    '--network_device',
+    type=str,
+    default='a100_dgx',
+    help='Network device type to use. Default is a100_dgx.'
 )
 args = parser.parse_args()
 TOTAL_GPUS = args.total_gpus
 BASE_LOG_DIR = args.log_dir
+NETWORK_DEVICE = args.network_device
 # --- End Argument Parsing ---
 
 # --- Setup ---
 # Create a unique, timestamped directory for this run's logs to prevent overwrites.
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
 LOG_DIR = os.path.join(BASE_LOG_DIR, timestamp)
 
 # Create the log directory if it doesn't exist
@@ -33,28 +46,29 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # --- End Setup ---
 
 # Define the variables and their possible values
-cluster_config_num_replicas_list = [1, 2, 4, 8]
-replica_config_tensor_parallel_size_list = [1, 2, 4, 8]
-replica_config_pipeline_parallel_size_list = [1, 2, 4, 8]
+#cluster_config_num_replicas_list = [1, 2, 4, 8]
+#replica_config_tensor_parallel_size_list = [1, 2, 4, 8]
+#replica_config_pipeline_parallel_size_list = [1, 2, 4, 8]
+cluster_config_num_replicas_list = [1]
+replica_config_tensor_parallel_size_list = [1]
+replica_config_pipeline_parallel_size_list = [1]
 
 # Base command template
 base_command = (
     "python -m vidur.main "
     "--time_limit 10000 "
     "--replica_config_model_name meta-llama/Meta-Llama-3-8B "
-    "--replica_config_device a100 "
-    "--replica_config_network_device a100_dgx "
     "--request_generator_config_type synthetic "
-    "--synthetic_request_generator_config_num_requests 128 "
-    "--length_generator_config_type trace "
-    "--trace_request_length_generator_config_trace_file ./misc/scaled_mooncake.csv "
-    "--interval_generator_config_type poisson "
-    "--poisson_request_interval_generator_config_qps 8.0 "
+    "--synthetic_request_generator_config_num_requests 20 "
+    "--length_generator_config_type fixed "
+    "--fixed_request_length_generator_config_prefill_tokens 2048 "
+    "--fixed_request_length_generator_config_decode_tokens 512 "
+    "--interval_generator_config_type static "
     "--global_scheduler_config_type round_robin "
     "--replica_scheduler_config_type vllm_v1 "
     "--vllm_v1_scheduler_config_chunk_size 512 "
     "--vllm_v1_scheduler_config_batch_size_cap 512 "
-    "--cache_config_enable_prefix_caching"
+    #"--cache_config_enable_prefix_caching"
 )
 
 print(f"Starting experiment with a total of {TOTAL_GPUS} GPUs available.")
@@ -86,8 +100,12 @@ for num_replicas in cluster_config_num_replicas_list:
                 f"{base_command} "
                 f"--cluster_config_num_replicas {num_replicas} "
                 f"--replica_config_tensor_parallel_size {tensor_parallel_size} "
-                f"--replica_config_num_pipeline_stages {pipeline_parallel_size}"
+                f"--replica_config_num_pipeline_stages {pipeline_parallel_size} "
+                #add network deivice
+                f"--replica_config_device {args.replica_config_device} "
+                f"--replica_config_network_device {NETWORK_DEVICE}"
             )
+            print(f"python command = {python_command}")
 
             # Construct the full command to activate venv, run the python script,
             # and redirect both stdout and stderr to the log file.

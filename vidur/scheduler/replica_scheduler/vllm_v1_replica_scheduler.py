@@ -3,6 +3,7 @@ from typing import Deque, Dict, List
 
 from vidur.entities.batch import Batch, Request
 from vidur.kv_cache.replica_kv_cache_manager import ReplicaKVCacheManager
+from vidur.logger import init_logger
 from vidur.scheduler.replica_scheduler.base_replica_scheduler import (
     BaseReplicaScheduler,
 )
@@ -10,6 +11,9 @@ from vidur.scheduler.replica_scheduler.replica_scheduler_output import (
     ReplicaSchedulerOutput,
 )
 from vidur.types.request_queue_type import RequestQueueType
+
+
+logger = init_logger(__name__, "debug")
 
 
 class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
@@ -43,6 +47,11 @@ class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
         # The requests that have been scheduled and are being executed
         # by the executor.
         self.scheduled_req_ids: set[str] = set()
+        
+        logger.debug(f"Initialized VLLM v1 scheduler with max_batch_size={self._max_batch_size}, "
+                    f"max_micro_batch_size={self._max_micro_batch_size}, "
+                    f"block_size={self._cache_config.block_size}, "
+                    f"num_blocks={self._cache_config.num_blocks}")
 
     @property
     def memory_usage_percent(self) -> float:
@@ -56,6 +65,8 @@ class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
         request.assign_replica(self._replica_id)
         self._waiting_queue.push(request)
         self._requests[request.id] = request
+        logger.debug(f"Added request {request.id} to waiting queue: "
+                    f"prefill={request.num_prefill_tokens}, decode={request.num_decode_tokens}")
 
     def _get_request_next_num_tokens(self, request: Request, token_budget: int) -> int:
         assert not request.completed
@@ -69,6 +80,9 @@ class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
         next_num_tokens = min(next_num_tokens, token_budget)
         # No negative answer
         next_num_tokens = max(0, next_num_tokens)
+        logger.debug(f"Request {request.id} next tokens: {next_num_tokens} "
+                    f"(prefill_complete={request.is_prefill_complete}, "
+                    f"processed={request.num_processed_tokens})")
         return next_num_tokens
 
     def _get_next_batch(self, current_time: float) -> ReplicaSchedulerOutput:
@@ -238,6 +252,8 @@ class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
     def on_batch_end(self, batch: Batch) -> None:
         self._num_running_batches -= 1
         new_running: List[Request] = []
+        
+        logger.debug(f"Processing batch end with {len(self._running)} running requests")
 
         # NOTE(woosuk): As len(self.running) can be up to 1K or more, the below
         # loop can be a performance bottleneck. We should do our best to avoid
@@ -250,14 +266,17 @@ class VLLMV1ReplicaScheduler(BaseReplicaScheduler):
                 new_running.append(request)
                 continue
             elif request.completed:
+                logger.debug(f"Request {req_id} completed, freeing resources")
                 self._free_request(request)
             else:
                 new_running.append(request)
             self.scheduled_req_ids.remove(req_id)
         self._running = new_running
+        logger.debug(f"Batch end complete, {len(self._running)} requests still running")
 
     def _free_request(self, request: Request) -> None:
         assert request.completed
+        logger.debug(f"Freeing resources for completed request {request.id}")
         self._kv_cache_manager.free(request)
         self._kv_cache_manager.free_block_hashes(request)
         del self._requests[request.id]

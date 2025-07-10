@@ -15,17 +15,26 @@ class GlobalScheduleEvent(BaseEvent):
     ) -> List[BaseEvent]:
         from vidur.events.replica_schedule_event import ReplicaScheduleEvent
 
+        logger.debug(f"Handling global schedule event at {self.time:.2f}s")
         self._replica_set = set()
         self._request_mapping = scheduler.schedule()
 
+        if not self._request_mapping:
+            logger.debug("No requests mapped to replicas")
+            return []
+
+        logger.debug(f"Mapped {len(self._request_mapping)} requests to replicas")
         for replica_id, request in self._request_mapping:
             self._replica_set.add(replica_id)
             scheduler.get_replica_scheduler(replica_id).add_request(request)
+            logger.debug(f"Added request {request.id} to replica {replica_id}")
 
-        return [
+        events = [
             ReplicaScheduleEvent(self.time, replica_id)
             for replica_id in self._replica_set
         ]
+        logger.debug(f"Created {len(events)} replica schedule events")
+        return events
 
     def to_dict(self):
         return {

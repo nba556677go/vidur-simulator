@@ -2,7 +2,7 @@
 #run command - 
 
 # docker run -it --rm --gpus all --ipc=host [build docker image ]
-#ex. docker run -it --rm --gpus all --ipc=host -v $PWD/s3-local/:$PWD/s3-local/   -e RAY_CGRAPH_get_timeout=300  -e RAY_CGRAPH_submit_timeout=300 nba556677/vllm:12.8 bash
+#docker run -it --gpus all --ipc=host -v $HOME/vidur-simulator:$HOME/vidur-simulator/ -v ~/.cache/huggingface:/root/.cache/huggingface -e RAY_CGRAPH_get_timeout=300 -e RAY_CGRAPH_submit_timeout=300 -e HF_TOKEN nba556677/vllm:12.8 bash
 # Start with NVIDIA CUDA 12.8 base image
 FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
 

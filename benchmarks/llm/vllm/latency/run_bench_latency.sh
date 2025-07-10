@@ -25,7 +25,7 @@ set -o pipefail
 # --- Benchmark Parameters ---
 
 # Fixed parameters for every benchmark run
-MODEL_NAME="Qwen/Qwen3-4B-AWQ"
+MODEL_NAME="meta-llama/Meta-Llama-3-8B"
 PROMPTS_FILE="../../prompts/prompt_extend_4000_numprompts100.txt"
 CONCURRENCY=20
 TOTAL_GPUS=8
@@ -42,7 +42,7 @@ BASE_CMD="python3 bench_latency.py --model $MODEL_NAME --prompts-file $PROMPTS_F
 TP_VALUES=(1)
 # Valid Data Parallelism (dp) sizes to test
 #DP_VALUES=(1 2 4 8)
-DP_VALUES=(4)
+DP_VALUES=(1)
 
 # Define a specific set of 4 values for max-num-batched-tokens to test.
 # This samples performance across the requested range of 4096 to 75360.
