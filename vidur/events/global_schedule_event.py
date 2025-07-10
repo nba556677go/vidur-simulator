@@ -1,6 +1,9 @@
 from typing import List
 
 from vidur.events import BaseEvent
+from vidur.logger import init_logger
+
+logger = init_logger(__name__)
 from vidur.metrics.cluster_metrics_store import ClusterMetricsStore
 from vidur.scheduler import BaseGlobalScheduler
 from vidur.types import EventType

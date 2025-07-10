@@ -2,6 +2,9 @@ from typing import List
 
 from vidur.entities.batch import Batch
 from vidur.events import BaseEvent
+from vidur.logger import init_logger
+
+logger = init_logger(__name__)
 from vidur.metrics import ClusterMetricsStore
 from vidur.scheduler import BaseGlobalScheduler
 from vidur.scheduler.replica_scheduler.replica_scheduler_output import (

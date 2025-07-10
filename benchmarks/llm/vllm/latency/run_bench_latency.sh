@@ -26,8 +26,8 @@ set -o pipefail
 
 # Fixed parameters for every benchmark run
 MODEL_NAME="meta-llama/Meta-Llama-3-8B"
-PROMPTS_FILE="../../prompts/prompt_extend_4000_numprompts100.txt"
-CONCURRENCY=20
+PROMPTS_FILE="../../prompts/prompt_extend_2048_numprompts5.txt"
+CONCURRENCY=5
 TOTAL_GPUS=8
 #OUTPUT_DIR="./sweep_configs"
 OUTPUT_DIR="./test"
@@ -48,8 +48,7 @@ DP_VALUES=(1)
 # This samples performance across the requested range of 4096 to 75360.
 #TOKEN_BATCH_VALUES=(4096 20480 40960 73728)
 TOKEN_BATCH_VALUES=(20480)
-
-
+MAX_TOKENS=512
 # --- Main Loop ---
 
 echo "Starting vLLM benchmark sweep..."
@@ -68,13 +67,13 @@ for tp in "${TP_VALUES[@]}"; do
       echo "------------------------------------------------------------------"
 
       # Loop over the specified max-num-batched-tokens values
-      for max_tokens in "${TOKEN_BATCH_VALUES[@]}"; do
+      for max_batch_tokens in "${TOKEN_BATCH_VALUES[@]}"; do
         
         echo ""
-        echo "===== RUNNING: TP=$tp, DP=$dp, max_tokens=$max_tokens ====="
+        echo "===== RUNNING: TP=$tp, DP=$dp, max_batch_tokens=$max_batch_tokens, max_tokens=$MAX_TOKENS ====="
 
         # Construct the full command
-        full_command="$BASE_CMD --tp $tp --dp $dp --max-num-batched-tokens $max_tokens"
+        full_command="$BASE_CMD --tp $tp --dp $dp --max-num-batched-tokens $max_batch_tokens --max-tokens $MAX_TOKENS"
 
         # Print the command being executed
         echo "Executing: $full_command"
@@ -82,7 +81,7 @@ for tp in "${TP_VALUES[@]}"; do
         # Execute the benchmark command
         $full_command
         
-        echo "===== COMPLETED: TP=$tp, DP=$dp, max_tokens=$max_tokens ====="
+        echo "===== COMPLETED: TP=$tp, DP=$dp, max_batch_tokens=$max_batch_tokens ====="
         # Optional: Add a small delay between runs if needed
         # sleep 5
       done

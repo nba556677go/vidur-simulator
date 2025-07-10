@@ -75,11 +75,18 @@ class LLMBenchmark:
         """
         request_id = str(uuid.uuid4())
         
+        # Record request arrival time
+        arrival_time = prompt_info.get("arrival_time", time.time())
+        
         # In trace mode, input_tokens is pre-calculated and passed in prompt_info.
         # In prompt mode, we calculate it on the fly.
         input_tokens = prompt_info.get("input_tokens", len(self.tokenizer.encode(prompt)))
         
-        start_time = time.time()
+        # Record when request processing actually starts (prefill begins)
+        processing_start_time = time.time()
+        schedule_delay = processing_start_time - arrival_time
+        
+        start_time = processing_start_time
         first_token_time = None
         token_times = []
 
@@ -123,6 +130,9 @@ class LLMBenchmark:
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": input_tokens + output_tokens,
+            "arrival_time": arrival_time,
+            "processing_start_time": processing_start_time,
+            "schedule_delay": schedule_delay,
             "total_latency": total_latency,
             "time_to_first_token": time_to_first_token,
             "avg_inter_token_latency": avg_inter_token_latency,
@@ -158,6 +168,7 @@ class LLMBenchmark:
                     "prompt": prompt_text,
                     "params": sampling_params,
                     "arrived_at": arrival_time,
+                    "arrival_time": arrival_time,  # Add explicit arrival_time for consistency
                     "input_tokens": num_prefill,
                     "is_trace": True,
                 })
@@ -188,6 +199,9 @@ class LLMBenchmark:
                 sleep_duration = max(0, target_arrival_mono - time.monotonic())
                 await asyncio.sleep(sleep_duration)
                 
+                # Set the actual arrival time when the request is processed
+                req['arrival_time'] = time.time()
+                
                 task = asyncio.create_task(self.generate_text(req['prompt'], req['params'], req))
                 tasks.append(task)
             
@@ -200,7 +214,9 @@ class LLMBenchmark:
                 max_tokens=gen_params.get("max_tokens", 256)
             )
             for prompt in prompts:
-                task = asyncio.create_task(self.generate_text(prompt, sampling_params, {}))
+                # Record arrival time for prompt-based requests
+                prompt_info = {"arrival_time": time.time()}
+                task = asyncio.create_task(self.generate_text(prompt, sampling_params, prompt_info))
                 tasks.append(task)
                 if len(tasks) >= concurrency:
                     await asyncio.gather(*tasks)
@@ -219,6 +235,7 @@ class LLMBenchmark:
         total_latencies_ms = [r["total_latency"] * 1000 for r in self.results]
         first_token_latencies_ms = [r["time_to_first_token"] * 1000 for r in self.results]
         inter_token_latencies_ms = [lat * 1000 for r in self.results for lat in r["token_latencies"]]
+        schedule_delays_ms = [r["schedule_delay"] * 1000 for r in self.results]
 
         def calculate_percentiles(values, prefix=""):
             if not values: return {}
@@ -231,6 +248,7 @@ class LLMBenchmark:
         total_latency_stats = calculate_percentiles(total_latencies_ms, "total_")
         first_token_stats = calculate_percentiles(first_token_latencies_ms, "first_token_")
         inter_token_stats = calculate_percentiles(inter_token_latencies_ms, "inter_token_")
+        schedule_delay_stats = calculate_percentiles(schedule_delays_ms, "schedule_delay_")
 
         total_input_tokens = sum(r['input_tokens'] for r in self.results)
         total_output_tokens = sum(r['output_tokens'] for r in self.results)
@@ -250,6 +268,7 @@ class LLMBenchmark:
                 "total_generation_latency": total_latency_stats,
                 "time_to_first_token": first_token_stats,
                 "inter_token_latency": inter_token_stats,
+                "schedule_delay": schedule_delay_stats,
             }
         }
 
@@ -265,6 +284,7 @@ class LLMBenchmark:
         total_latency_stats = latency_stats["total_generation_latency"]
         first_token_stats = latency_stats["time_to_first_token"]
         inter_token_stats = latency_stats["inter_token_latency"]
+        schedule_delay_stats = latency_stats["schedule_delay"]
 
         print("\n=== Benchmark Results ===")
         print(f"Total requests: {summary['total_requests']}")
@@ -290,6 +310,12 @@ class LLMBenchmark:
             print(f"  Avg: {inter_token_stats['inter_token_avg']:.2f}  P50: {inter_token_stats['inter_token_p50']:.2f}")
             print(f"  P90: {inter_token_stats['inter_token_p90']:.2f}  P95: {inter_token_stats['inter_token_p95']:.2f}")
             print(f"  P99: {inter_token_stats['inter_token_p99']:.2f}  Max: {inter_token_stats['inter_token_max']:.2f}")
+        
+        if schedule_delay_stats:
+            print("\nSchedule Delay:")
+            print(f"  Avg: {schedule_delay_stats['schedule_delay_avg']:.2f}  P50: {schedule_delay_stats['schedule_delay_p50']:.2f}")
+            print(f"  P90: {schedule_delay_stats['schedule_delay_p90']:.2f}  P95: {schedule_delay_stats['schedule_delay_p95']:.2f}")
+            print(f"  P99: {schedule_delay_stats['schedule_delay_p99']:.2f}  Max: {schedule_delay_stats['schedule_delay_max']:.2f}")
         
         if torch.cuda.is_available():
             free, total = torch.cuda.mem_get_info()

@@ -690,6 +690,14 @@ class ReplicaMetricsStore:
         total_tokens_stats = self._request_metrics_histogram[
             RequestMetricsHistogram.REQUEST_PREFILL_TOKENS
         ].get_stats()
+        
+        if cached_tokens_stats is None or total_tokens_stats is None:
+            return {
+                "cached_tokens_sum": 0,
+                "total_tokens_sum": 0,
+                "hit_ratio": 0.0,
+            }
+            
         return {
             "cached_tokens_sum": int(cached_tokens_stats["sum"]),
             "total_tokens_sum": int(total_tokens_stats["sum"]),

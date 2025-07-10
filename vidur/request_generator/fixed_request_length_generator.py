@@ -11,4 +11,7 @@ class FixedRequestLengthGenerator(BaseRequestLengthGenerator):
         return RequestLengthGeneratorOutput(
             num_prefill_tokens=self._config.prefill_tokens,
             num_decode_tokens=self._config.decode_tokens,
+            block_hash_ids=None,
+            block_size=None,
+            session_id=None,
         )

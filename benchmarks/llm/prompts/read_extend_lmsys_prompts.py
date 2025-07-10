@@ -4,10 +4,10 @@ from transformers import AutoTokenizer
 def process_and_save_prompts(
     parquet_path, 
     output_path, 
-    model_name="Qwen/Qwen1.5-1.8B-Chat", 
-    target_length=4000, 
-    num_prompts=100
-):
+    model_name, 
+    target_length, 
+    num_prompts
+    ):
     """
     Reads prompts, adjusts them to a specific token length, and saves them
     in a format ready for vllm's --prompt-file argument.
@@ -59,7 +59,7 @@ def process_and_save_prompts(
                     final_ids = input_ids
                 
                 # Decode back to a string
-                final_prompt = tokenizer.decode(final_ids, skip_special_tokens=True)
+                final_prompt = tokenizer.decode(final_ids, skip_special_tokens=False)
                 
                 # Clean up any newlines to ensure one prompt per line
                 cleaned_prompt = final_prompt.replace('\n', ' ').strip()
@@ -92,10 +92,10 @@ if __name__ == "__main__":
    
     
     # 3. Target token length for each prompt
-    TOKEN_LENGTH = 30
+    TOKEN_LENGTH = 2048
 
 
-    num_prompts=150
+    num_prompts=5
     # 2. The desired name for your vllm prompt file
     output_prompt_file = f'prompt_extend_{TOKEN_LENGTH}_numprompts{num_prompts}.txt'
     
@@ -103,7 +103,8 @@ if __name__ == "__main__":
     # NOTE: "qwen-2.5b" is not a recognized model on Hugging Face as of late 2024.
     # Using a valid Qwen model like "Qwen/Qwen1.5-1.8B-Chat" instead. 
     # Please change this if you have a different specific model name.
-    TOKENIZER_MODEL = "Qwen/Qwen1.5-1.8B-Chat"
+    #TOKENIZER_MODEL = "Qwen/Qwen1.5-1.8B-Chat"
+    TOKENIZER_MODEL = "meta-llama/Meta-Llama-3-8B"
     
     # --- Execution ---
     process_and_save_prompts(

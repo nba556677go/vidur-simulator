@@ -34,4 +34,7 @@ class ZipfRequestLengthGenerator(BaseRequestLengthGenerator):
         return RequestLengthGeneratorOutput(
             num_prefill_tokens=prefill_tokens,
             num_decode_tokens=decode_tokens,
+            block_hash_ids=None,
+            block_size=None,
+            session_id=None,
         )

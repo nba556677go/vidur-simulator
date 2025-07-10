@@ -1,7 +1,10 @@
 import subprocess
 import os
 import argparse
+import logging
 from datetime import datetime
+
+
 
 # --- Argument Parsing ---
 # Set up an argument parser to accept command-line arguments
@@ -30,10 +33,21 @@ parser.add_argument(
     default='a100_dgx',
     help='Network device type to use. Default is a100_dgx.'
 )
+parser.add_argument(
+    '--debug',
+    action='store_true',
+    help='Enable debug logging'
+)
 args = parser.parse_args()
 TOTAL_GPUS = args.total_gpus
 BASE_LOG_DIR = args.log_dir
 NETWORK_DEVICE = args.network_device
+
+# Setup logging based on debug flag
+log_level = logging.DEBUG if args.debug else logging.INFO
+logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # --- End Argument Parsing ---
 
 # --- Setup ---
@@ -59,7 +73,7 @@ base_command = (
     "--time_limit 10000 "
     "--replica_config_model_name meta-llama/Meta-Llama-3-8B "
     "--request_generator_config_type synthetic "
-    "--synthetic_request_generator_config_num_requests 20 "
+    "--synthetic_request_generator_config_num_requests 5 "
     "--length_generator_config_type fixed "
     "--fixed_request_length_generator_config_prefill_tokens 2048 "
     "--fixed_request_length_generator_config_decode_tokens 512 "
@@ -71,8 +85,8 @@ base_command = (
     #"--cache_config_enable_prefix_caching"
 )
 
-print(f"Starting experiment with a total of {TOTAL_GPUS} GPUs available.")
-print(f"Logs for this run will be saved in the '{LOG_DIR}' directory.")
+logger.info(f"Starting experiment with a total of {TOTAL_GPUS} GPUs available.")
+logger.info(f"Logs for this run will be saved in the '{LOG_DIR}' directory.")
 
 # Iterate through all combinations of the variables
 for num_replicas in cluster_config_num_replicas_list:
@@ -84,11 +98,7 @@ for num_replicas in cluster_config_num_replicas_list:
 
             # Check if the configuration is possible with the available GPUs
             if gpus_required > TOTAL_GPUS:
-                print("-" * 80)
-                print(f"Skipping impossible configuration:")
-                print(f"  - Replicas (DP): {num_replicas}, TP: {tensor_parallel_size}, PP: {pipeline_parallel_size}")
-                print(f"  - GPUs Required ({gpus_required}) > Total GPUs Available ({TOTAL_GPUS})")
-                print("-" * 80)
+                logger.warning(f"Skipping impossible configuration: DP={num_replicas}, TP={tensor_parallel_size}, PP={pipeline_parallel_size} (requires {gpus_required} > {TOTAL_GPUS} GPUs)")
                 continue  # Skip to the next iteration
 
             # Create a unique log file name for the current configuration
@@ -105,20 +115,13 @@ for num_replicas in cluster_config_num_replicas_list:
                 f"--replica_config_device {args.replica_config_device} "
                 f"--replica_config_network_device {NETWORK_DEVICE}"
             )
-            print(f"python command = {python_command}")
+            logger.debug(f"Command: {python_command}")
 
             # Construct the full command to activate venv, run the python script,
             # and redirect both stdout and stderr to the log file.
             command_to_run = f"source .venv/bin/activate && {python_command} > {log_filepath} 2>&1"
 
-            print("="*80)
-            print(f"Running configuration:")
-            print(f"  - Replicas (DP): {num_replicas}")
-            print(f"  - Tensor Parallel (TP): {tensor_parallel_size}")
-            print(f"  - Pipeline Parallel (PP): {pipeline_parallel_size}")
-            print(f"  - GPUs Required: {gpus_required} (of {TOTAL_GPUS} available)")
-            print(f"  - Logging output to: {log_filepath}")
-            print("="*80)
+            logger.info(f"Running DP={num_replicas}, TP={tensor_parallel_size}, PP={pipeline_parallel_size} ({gpus_required} GPUs) -> {log_filepath}")
 
             try:
                 # Execute the command using a shell. We don't need to capture output
@@ -130,16 +133,14 @@ for num_replicas in cluster_config_num_replicas_list:
                     text=True,
                     executable='/bin/bash'
                 )
-                print(f"Command executed successfully. See log for details: {log_filepath}")
+                logger.info(f"Configuration completed successfully: {log_filepath}")
             except subprocess.CalledProcessError as e:
-                print(f"Command failed with exit code {e.returncode}.")
-                print(f"Check the log file for error details: {log_filepath}")
+                logger.error(f"Configuration failed (exit code {e.returncode}): {log_filepath}")
             except FileNotFoundError:
-                print(f"Error: The shell '/bin/bash' was not found.")
-                print("Please ensure you are on a Unix-like system (Linux, macOS).")
+                logger.error("Shell '/bin/bash' not found. Ensure you're on a Unix-like system.")
                 break # Exit the loop if the shell is not found
             except Exception as e:
-                print(f"An unexpected error occurred: {e}")
+                logger.error(f"Unexpected error: {e}")
 
 
-print("\nAll configurations have been processed.")
+logger.info("All configurations processed.")
