@@ -26,6 +26,7 @@ class LLMBenchmark:
     """
     def __init__(self,
                  model_name: str,
+                 args,
                  nsys: bool = False,
                  download_dir: str = None,
                  tensor_parallel_size: int = 1,
@@ -36,6 +37,7 @@ class LLMBenchmark:
         self.engine = None
         self.nsys = nsys
         self.results = []
+        self.args = args
         
         # vLLM Engine Parameters
         self.tensor_parallel_size = tensor_parallel_size
@@ -60,13 +62,62 @@ class LLMBenchmark:
             # NOTE: max_model_len is removed to allow vLLM to auto-detect from the model's config.
             # This resolves the ValidationError.
             max_num_batched_tokens=self.max_num_batched_tokens,
+            max_num_seqs=self.args.max_num_seqs,
             dtype="auto",
             trust_remote_code=True,
             enforce_eager=True,
-            download_dir=self.download_dir
+            download_dir=self.download_dir,
+            enable_prefix_caching=False #disable prefix caching
         )
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
         logger.info(f"Initialized vLLM engine for {self.model_name}")
+
+    async def run_warmup(self, warmup_requests: int = 5):
+        """Run warmup requests to prepare the engine for benchmarking."""
+        self._warmup_requests = warmup_requests
+        
+        if warmup_requests <= 0:
+            logger.info("Skipping warmup (warmup_requests = 0)")
+            return
+
+        logger.info(f"Starting warmup with {warmup_requests} requests...")
+        
+        # Create a simple warmup prompt
+        warmup_prompt = "Hello, this is a warmup request to prepare the engine."
+        warmup_sampling_params = SamplingParams(max_tokens=32, temperature=0.0)
+        
+        warmup_tasks = []
+        warmup_start_time = time.time()
+        
+        for i in range(warmup_requests):
+            prompt_info = {"arrival_time": time.time(), "is_warmup": True}
+            task = asyncio.create_task(self._warmup_generate_text(warmup_prompt, warmup_sampling_params, prompt_info))
+            warmup_tasks.append(task)
+        
+        # Wait for all warmup requests to complete
+        await asyncio.gather(*warmup_tasks)
+        
+        warmup_duration = time.time() - warmup_start_time
+        logger.info(f"Warmup completed in {warmup_duration:.2f} seconds")
+
+    async def _warmup_generate_text(self, prompt: str, sampling_params: SamplingParams, prompt_info: Dict):
+        """Generate text for warmup requests (results not recorded in benchmark stats)."""
+        request_id = str(uuid.uuid4())
+        
+        try:
+            results_generator = self.engine.generate(prompt, sampling_params, request_id)
+            
+            final_output = None
+            async for output in results_generator:
+                final_output = output
+            
+            if final_output is None:
+                logger.warning(f"Warmup request {request_id} failed")
+            else:
+                logger.debug(f"Warmup request {request_id} completed successfully")
+                
+        except Exception as e:
+            logger.warning(f"Warmup request {request_id} failed with error: {e}")
 
     async def generate_text(self, prompt: str, sampling_params: SamplingParams, prompt_info: Dict):
         """
@@ -214,7 +265,8 @@ class LLMBenchmark:
                 max_tokens=gen_params.get("max_tokens", 256)
             )
             for prompt in prompts:
-                # Record arrival time for prompt-based requests
+                # Record arrival time when task is created (request submitted to system)
+                # This represents when the request actually arrives at the system
                 prompt_info = {"arrival_time": time.time()}
                 task = asyncio.create_task(self.generate_text(prompt, sampling_params, prompt_info))
                 tasks.append(task)
@@ -336,6 +388,7 @@ class LLMBenchmark:
                 "pipeline_parallel_size": self.pipeline_parallel_size,
                 "data_parallel_size": self.data_parallel_size,
                 "max_num_batched_tokens": self.max_num_batched_tokens,
+                "warmup_requests": getattr(self, "_warmup_requests", 0),
             },
             "benchmark_stats": stats,
             "individual_requests": self.results
@@ -364,9 +417,11 @@ async def main():
     parser.add_argument("--pp", "--pipeline-parallel-size", dest="pipeline_parallel_size", type=int, default=1, help="Pipeline parallel size.")
     parser.add_argument("--dp", "--data-parallel-size", dest="data_parallel_size", type=int, default=1, help="Data parallel size.")
     parser.add_argument("--max-num-batched-tokens", type=int, default=4096, help="Maximum number of batched tokens.")
+    parser.add_argument("--max-num-seqs", type=int, default=1024, help="Maximum number of concurrent req")
 
     # --- Benchmark Run Arguments ---
     parser.add_argument("--concurrency", type=int, default=8, help="Number of concurrent requests (for --prompts-file mode).")
+    parser.add_argument("--warmup-requests", type=int, default=5, help="Number of warmup requests to run before actual benchmark.")
     
     # --- Generation Parameters (for --prompts-file mode) ---
     parser.add_argument("--max-tokens", type=int, default=1024, help="Maximum number of new tokens to generate.")
@@ -418,8 +473,13 @@ async def main():
             pipeline_parallel_size=args.pipeline_parallel_size,
             data_parallel_size=args.data_parallel_size,
             max_num_batched_tokens=args.max_num_batched_tokens,
-            download_dir=args.download_dir
+            download_dir=args.download_dir,
+            args =args
         )
+        
+        # Initialize engine and run warmup
+        await benchmark.initialize_engine()
+        await benchmark.run_warmup(args.warmup_requests)
         
         if args.trace:
             await benchmark.run_benchmark(trace_path=args.trace)

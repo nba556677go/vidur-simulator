@@ -47,8 +47,11 @@ DP_VALUES=(1)
 # Define a specific set of 4 values for max-num-batched-tokens to test.
 # This samples performance across the requested range of 4096 to 75360.
 #TOKEN_BATCH_VALUES=(4096 20480 40960 73728)
-TOKEN_BATCH_VALUES=(20480)
-MAX_TOKENS=512
+TOKEN_BATCH_VALUES=(512)
+
+#fix engine configs 
+MAX_NUM_SEQS=512 # concurrent
+MAX_TOKENS=512 #output token size
 # --- Main Loop ---
 
 echo "Starting vLLM benchmark sweep..."
@@ -73,7 +76,7 @@ for tp in "${TP_VALUES[@]}"; do
         echo "===== RUNNING: TP=$tp, DP=$dp, max_batch_tokens=$max_batch_tokens, max_tokens=$MAX_TOKENS ====="
 
         # Construct the full command
-        full_command="$BASE_CMD --tp $tp --dp $dp --max-num-batched-tokens $max_batch_tokens --max-tokens $MAX_TOKENS"
+        full_command="$BASE_CMD --tp $tp --dp $dp --max-num-batched-tokens $max_batch_tokens --max-tokens $MAX_TOKENS --max-num-seqs $MAX_NUM_SEQS"
 
         # Print the command being executed
         echo "Executing: $full_command"
