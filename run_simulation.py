@@ -19,7 +19,7 @@ parser.add_argument(
     '--log_dir',
     type=str,
     default='./simulator_output',
-    help='Base directory to save the log files. A timestamped subdirectory will be created here. Default is ./logs.'
+    help='Base directory to save the log files and outputs. A timestamped subdirectory will be created here. Default is ./logs.'
 )
 parser.add_argument(
     '--replica_config_device',
@@ -34,13 +34,20 @@ parser.add_argument(
     help='Network device type to use. Default is a100_dgx.'
 )
 parser.add_argument(
+    '--qps',
+    type=float,
+    default=0,
+    help='qps value. default disable with 0 '
+)
+
+parser.add_argument(
     '--debug',
     action='store_true',
     help='Enable debug logging'
 )
 args = parser.parse_args()
 TOTAL_GPUS = args.total_gpus
-BASE_LOG_DIR = args.log_dir
+BASE_LOG_DIR = f"{args.log_dir}/qps{args.qps}"
 NETWORK_DEVICE = args.network_device
 
 # Setup logging based on debug flag
@@ -63,8 +70,8 @@ os.makedirs(LOG_DIR, exist_ok=True)
 cluster_config_num_replicas_list = [1, 2, 4, 8]
 replica_config_tensor_parallel_size_list = [1, 2, 4, 8]
 #replica_config_pipeline_parallel_size_list = [1, 2, 4, 8]
-#cluster_config_num_replicas_list = [1]
-#replica_config_tensor_parallel_size_list = [1]
+cluster_config_num_replicas_list = [1]
+replica_config_tensor_parallel_size_list = [1]
 replica_config_pipeline_parallel_size_list = [1]
 
 # Base command template
@@ -73,17 +80,18 @@ base_command = (
     "--time_limit 10000 "
     "--replica_config_model_name meta-llama/Meta-Llama-3-8B "
     "--request_generator_config_type synthetic "
-    "--synthetic_request_generator_config_num_requests 30 "
+    "--synthetic_request_generator_config_num_requests 150 "
     "--length_generator_config_type fixed "
     "--fixed_request_length_generator_config_prefill_tokens 2048 "
     "--fixed_request_length_generator_config_decode_tokens 512 "
     #"--interval_generator_config_type static "
     "--interval_generator_config_type poisson "
-    "--poisson_request_interval_generator_config_qps 2.0 "
+    f"--poisson_request_interval_generator_config_qps {args.qps} "
     "--global_scheduler_config_type round_robin "
     "--replica_scheduler_config_type vllm_v1 "
-    "--vllm_v1_scheduler_config_chunk_size 512 "
+    "--vllm_v1_scheduler_config_chunk_size 8192 "
     "--vllm_v1_scheduler_config_batch_size_cap 512 "
+    f"--metrics_config_output_dir {BASE_LOG_DIR}"
     #"--cache_config_enable_prefix_caching"
 )
 
