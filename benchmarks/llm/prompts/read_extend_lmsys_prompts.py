@@ -95,7 +95,7 @@ if __name__ == "__main__":
     TOKEN_LENGTH = 2048
 
 
-    num_prompts=5
+    num_prompts=150
     # 2. The desired name for your vllm prompt file
     output_prompt_file = f'prompt_extend_{TOKEN_LENGTH}_numprompts{num_prompts}.txt'
     

@@ -26,23 +26,39 @@ set -o pipefail
 
 # Fixed parameters for every benchmark run
 MODEL_NAME="meta-llama/Meta-Llama-3-8B"
-PROMPTS_FILE="../../prompts/prompt_extend_2048_numprompts5.txt"
-CONCURRENCY=5
+PROMPTS_FILE="../../prompts/prompt_extend_2048_numprompts150.txt"
+CONCURRENCY=30
 TOTAL_GPUS=8
-#OUTPUT_DIR="./sweep_configs"
-OUTPUT_DIR="./test"
-
+#OUTPUT_DIR="./sweep_configs/a100_40g"
+#OUTPUT_DIR="./test"
 # Base command for the Python benchmark script
-BASE_CMD="python3 bench_latency.py --model $MODEL_NAME --prompts-file $PROMPTS_FILE --concurrency $CONCURRENCY --output-dir $OUTPUT_DIR"
+#QPS=0 - use prompy mode
+QPS=25
+
+OUTPUT_DIR="./vllm_output/a100_p4d/qps$QPS"
+if [ -n "${QPS:-}" ]; then
+    BASE_CMD="python3 bench_latency.py \
+      --model $MODEL_NAME \
+      --qps-mode \
+      --qps-prompts-file $PROMPTS_FILE \
+      --qps $QPS \
+      --output-dir $OUTPUT_DIR"
+else
+    BASE_CMD="python3 bench_latency.py \
+      --model $MODEL_NAME \
+      --prompts-file $PROMPTS_FILE \
+      --concurrency $CONCURRENCY \
+      --output-dir $OUTPUT_DIR"
+fi
 
 # --- Iteration Values ---
 
 # Valid Tensor Parallelism (tp) sizes to test
-#TP_VALUES=(1 2 4 8)
-TP_VALUES=(1)
+TP_VALUES=(1 2 4 8)
+#TP_VALUES=(1)
 # Valid Data Parallelism (dp) sizes to test
-#DP_VALUES=(1 2 4 8)
-DP_VALUES=(1)
+DP_VALUES=(1 2 4 8)
+#DP_VALUES=(1)
 
 # Define a specific set of 4 values for max-num-batched-tokens to test.
 # This samples performance across the requested range of 4096 to 75360.

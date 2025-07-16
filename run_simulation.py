@@ -60,11 +60,11 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # --- End Setup ---
 
 # Define the variables and their possible values
-#cluster_config_num_replicas_list = [1, 2, 4, 8]
-#replica_config_tensor_parallel_size_list = [1, 2, 4, 8]
+cluster_config_num_replicas_list = [1, 2, 4, 8]
+replica_config_tensor_parallel_size_list = [1, 2, 4, 8]
 #replica_config_pipeline_parallel_size_list = [1, 2, 4, 8]
-cluster_config_num_replicas_list = [1]
-replica_config_tensor_parallel_size_list = [1]
+#cluster_config_num_replicas_list = [1]
+#replica_config_tensor_parallel_size_list = [1]
 replica_config_pipeline_parallel_size_list = [1]
 
 # Base command template
@@ -73,11 +73,13 @@ base_command = (
     "--time_limit 10000 "
     "--replica_config_model_name meta-llama/Meta-Llama-3-8B "
     "--request_generator_config_type synthetic "
-    "--synthetic_request_generator_config_num_requests 5 "
+    "--synthetic_request_generator_config_num_requests 30 "
     "--length_generator_config_type fixed "
     "--fixed_request_length_generator_config_prefill_tokens 2048 "
     "--fixed_request_length_generator_config_decode_tokens 512 "
-    "--interval_generator_config_type static "
+    #"--interval_generator_config_type static "
+    "--interval_generator_config_type poisson "
+    "--poisson_request_interval_generator_config_qps 2.0 "
     "--global_scheduler_config_type round_robin "
     "--replica_scheduler_config_type vllm_v1 "
     "--vllm_v1_scheduler_config_chunk_size 512 "

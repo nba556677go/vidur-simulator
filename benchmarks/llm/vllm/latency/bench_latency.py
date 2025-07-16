@@ -229,19 +229,105 @@ class LLMBenchmark:
             logger.error(f"Failed to read or parse trace file: {e}")
             raise
 
+    def _generate_poisson_arrivals(self, qps: float, num_requests: int) -> List[float]:
+        """Generate Poisson-distributed arrival times based on target QPS."""
+        logger.info(f"Generating {num_requests} Poisson arrivals with target QPS: {qps}")
+        
+        # Lambda parameter for exponential distribution (mean inter-arrival time)
+        mean_inter_arrival = 1.0 / qps
+        
+        # Generate exponentially distributed inter-arrival times
+        inter_arrival_times = np.random.exponential(mean_inter_arrival, num_requests - 1)
+        
+        # Convert to cumulative arrival times (starting from 0)
+        arrival_times = [0.0]
+        cumulative_time = 0.0
+        for inter_arrival in inter_arrival_times:
+            cumulative_time += inter_arrival
+            arrival_times.append(cumulative_time)
+            
+        logger.info(f"Generated arrival times span {arrival_times[-1]:.2f} seconds")
+        logger.info(f"Actual average QPS: {num_requests / arrival_times[-1]:.2f}")
+        
+        return arrival_times
+
     async def run_benchmark(self, 
                             prompts: List[str] = None, 
                             trace_path: str = None, 
                             gen_params: Dict = None, 
-                            concurrency: int = 1):
-        """Run benchmark from either a list of prompts or a trace file."""
+                            concurrency: int = 1,
+                            qps_mode: bool = False,
+                            qps: float = 1.0,
+                            num_requests: int = None,
+                            duration: float = None):
+        """Run benchmark from either a list of prompts, a trace file, or QPS mode."""
         if not self.engine:
             await self.initialize_engine()
         
         self._benchmark_start_mono = time.monotonic()
         tasks = []
 
-        if trace_path:
+        if qps_mode:
+            # --- QPS Mode with Poisson Arrivals ---
+            logger.info(f"Starting QPS mode benchmark with target QPS: {qps}")
+            
+            if not prompts:
+                raise ValueError("Prompts must be provided for QPS mode")
+                
+            # Determine number of requests
+            if duration:
+                estimated_requests = int(qps * duration)
+                logger.info(f"Duration-based mode: {duration}s duration, estimated {estimated_requests} requests")
+                actual_num_requests = estimated_requests
+            elif num_requests:
+                actual_num_requests = num_requests
+                logger.info(f"Fixed request count mode: {actual_num_requests} requests")
+            else:
+                actual_num_requests = len(prompts)
+                logger.info(f"Using all prompts from file: {actual_num_requests} requests")
+            
+            # Generate Poisson arrival times
+            arrival_times = self._generate_poisson_arrivals(qps, actual_num_requests)
+            
+            # Prepare sampling parameters
+            sampling_params = SamplingParams(
+                temperature=gen_params.get("temperature", 0.7),
+                top_p=gen_params.get("top_p", 0.9),
+                max_tokens=gen_params.get("max_tokens", 1024),
+                min_tokens=gen_params.get("min_tokens", 512)
+            )
+            
+            # Generate requests with Poisson arrivals
+            for i in range(actual_num_requests):
+                # Cycle through prompts if we have more requests than prompts
+                prompt = prompts[i % len(prompts)]
+                target_arrival_time = arrival_times[i]
+                
+                # Schedule the request
+                async def send_request(prompt_text, arrival_time, request_idx):
+                    # Wait until the scheduled arrival time
+                    target_arrival_mono = self._benchmark_start_mono + arrival_time
+                    sleep_duration = max(0, target_arrival_mono - time.monotonic())
+                    if sleep_duration > 0:
+                        await asyncio.sleep(sleep_duration)
+                    
+                    # Record actual arrival time and process request
+                    prompt_info = {"arrival_time": time.time(), "request_idx": request_idx}
+                    await self.generate_text(prompt_text, sampling_params, prompt_info)
+                
+                task = asyncio.create_task(send_request(prompt, target_arrival_time, i))
+                tasks.append(task)
+                
+                # If duration is specified, stop if we've exceeded the duration
+                if duration and target_arrival_time > duration:
+                    logger.info(f"Stopping request generation at {target_arrival_time:.2f}s (duration limit: {duration}s)")
+                    break
+            
+            # Wait for all requests to complete
+            logger.info(f"Waiting for {len(tasks)} requests to complete...")
+            await asyncio.gather(*tasks)
+            
+        elif trace_path:
             # --- Trace-driven Workload ---
             logger.info("Starting trace-driven benchmark...")
             requests = self._parse_trace_file(trace_path)
@@ -409,6 +495,7 @@ async def main():
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--prompts-file", type=str, help="Path to a file with prompts, one per line.")
     input_group.add_argument("--trace", type=str, help="Path to a CSV trace file for request simulation.")
+    input_group.add_argument("--qps-mode", action="store_true", help="Enable QPS mode with Poisson arrival distribution.")
     
     # --- Model and vLLM Engine Arguments ---
     parser.add_argument("--model", type=str, default="Qwen/Qwen1.5-0.5B", help="Name of the Hugging Face model to benchmark.")
@@ -423,6 +510,12 @@ async def main():
     parser.add_argument("--concurrency", type=int, default=8, help="Number of concurrent requests (for --prompts-file mode).")
     parser.add_argument("--warmup-requests", type=int, default=5, help="Number of warmup requests to run before actual benchmark.")
     
+    # --- QPS Mode Arguments ---
+    parser.add_argument("--qps", type=float, default=1.0, help="Target queries per second for QPS mode.")
+    parser.add_argument("--qps-prompts-file", type=str, help="Path to prompts file for QPS mode (required when using --qps-mode).")
+    parser.add_argument("--num-requests", type=int, help="Total number of requests to send in QPS mode (if not specified, uses all prompts from file).")
+    parser.add_argument("--duration", type=float, help="Duration in seconds to run QPS mode (alternative to --num-requests).")
+    
     # --- Generation Parameters (for --prompts-file mode) ---
     parser.add_argument("--max-tokens", type=int, default=1024, help="Maximum number of new tokens to generate.")
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature.")
@@ -433,6 +526,15 @@ async def main():
     parser.add_argument("--output-dir", type=str, default="./benchmark_runs", help="Base directory to save timestamped run folders.")
       
     args = parser.parse_args()
+    
+    # --- Validate QPS Mode Arguments ---
+    if args.qps_mode:
+        if not args.qps_prompts_file:
+            parser.error("--qps-prompts-file is required when using --qps-mode")
+        if args.num_requests and args.duration:
+            parser.error("Cannot specify both --num-requests and --duration for QPS mode")
+        if args.qps <= 0:
+            parser.error("--qps must be positive")
 
     # --- Setup Output Directory and Logging ---
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -483,7 +585,27 @@ async def main():
         
         if args.trace:
             await benchmark.run_benchmark(trace_path=args.trace)
+        elif args.qps_mode:
+            # --- QPS Mode ---
+            try:
+                with open(args.qps_prompts_file, "r", encoding="utf-8") as f:
+                    prompts = [line.strip() for line in f if line.strip()]
+                logger.info(f"Read {len(prompts)} prompts from {args.qps_prompts_file} for QPS mode")
+            except FileNotFoundError:
+                logger.error(f"Error: QPS prompts file not found at {args.qps_prompts_file}")
+                return
+            
+            gen_params = {"temperature": args.temperature, "top_p": args.top_p, "max_tokens": args.max_tokens, "min_tokens": int(0.7*int(args.max_tokens))}
+            await benchmark.run_benchmark(
+                prompts=prompts, 
+                gen_params=gen_params, 
+                qps_mode=True,
+                qps=args.qps,
+                num_requests=args.num_requests,
+                duration=args.duration
+            )
         else:
+            # --- Regular Prompts File Mode ---
             try:
                 with open(args.prompts_file, "r", encoding="utf-8") as f:
                     prompts = [line.strip() for line in f if line.strip()]
