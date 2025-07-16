@@ -168,7 +168,7 @@ class LLMBenchmark:
         
         end_time = time.time()
         output_tokens = len(final_output.outputs[0].token_ids)
-        
+        e2e_latency = end_time - arrival_time  # Calculate end-to-end latency
         total_latency = end_time - start_time
         time_to_first_token = first_token_time - start_time if first_token_time else 0
         inter_token_latencies = [token_times[i] - token_times[i-1] for i in range(1, len(token_times))]
@@ -185,6 +185,7 @@ class LLMBenchmark:
             "processing_start_time": processing_start_time,
             "schedule_delay": schedule_delay,
             "total_latency": total_latency,
+            "e2e_latency": e2e_latency,  # Add e2e latency to results
             "time_to_first_token": time_to_first_token,
             "avg_inter_token_latency": avg_inter_token_latency,
             "tokens_per_second": output_tokens / total_latency if total_latency > 0 else 0,
@@ -374,6 +375,8 @@ class LLMBenchmark:
         first_token_latencies_ms = [r["time_to_first_token"] * 1000 for r in self.results]
         inter_token_latencies_ms = [lat * 1000 for r in self.results for lat in r["token_latencies"]]
         schedule_delays_ms = [r["schedule_delay"] * 1000 for r in self.results]
+        e2e_latencies_ms = [r["e2e_latency"] * 1000 for r in self.results]  # Add e2e latencies
+
 
         def calculate_percentiles(values, prefix=""):
             if not values: return {}
@@ -387,6 +390,8 @@ class LLMBenchmark:
         first_token_stats = calculate_percentiles(first_token_latencies_ms, "first_token_")
         inter_token_stats = calculate_percentiles(inter_token_latencies_ms, "inter_token_")
         schedule_delay_stats = calculate_percentiles(schedule_delays_ms, "schedule_delay_")
+        e2e_latency_stats = calculate_percentiles(e2e_latencies_ms, "e2e_")  # Calculate e2e stats
+
 
         total_input_tokens = sum(r['input_tokens'] for r in self.results)
         total_output_tokens = sum(r['output_tokens'] for r in self.results)
@@ -407,6 +412,8 @@ class LLMBenchmark:
                 "time_to_first_token": first_token_stats,
                 "inter_token_latency": inter_token_stats,
                 "schedule_delay": schedule_delay_stats,
+                "e2e_latency": e2e_latency_stats,  # Add e2e latency stats
+
             }
         }
 
@@ -423,6 +430,7 @@ class LLMBenchmark:
         first_token_stats = latency_stats["time_to_first_token"]
         inter_token_stats = latency_stats["inter_token_latency"]
         schedule_delay_stats = latency_stats["schedule_delay"]
+        e2e_stats = latency_stats["e2e_latency"]
 
         print("\n=== Benchmark Results ===")
         print(f"Total requests: {summary['total_requests']}")
@@ -454,7 +462,13 @@ class LLMBenchmark:
             print(f"  Avg: {schedule_delay_stats['schedule_delay_avg']:.2f}  P50: {schedule_delay_stats['schedule_delay_p50']:.2f}")
             print(f"  P90: {schedule_delay_stats['schedule_delay_p90']:.2f}  P95: {schedule_delay_stats['schedule_delay_p95']:.2f}")
             print(f"  P99: {schedule_delay_stats['schedule_delay_p99']:.2f}  Max: {schedule_delay_stats['schedule_delay_max']:.2f}")
-        
+
+        if e2e_stats:
+            print("\nEnd-to-End Latency:")
+            print(f"  Avg: {e2e_stats['e2e_avg']:.2f}  P50: {e2e_stats['e2e_p50']:.2f}")
+            print(f"  P90: {e2e_stats['e2e_p90']:.2f}  P95: {e2e_stats['e2e_p95']:.2f}")
+            print(f"  P99: {e2e_stats['e2e_p99']:.2f}  Max: {e2e_stats['e2e_max']:.2f}")
+            
         if torch.cuda.is_available():
             free, total = torch.cuda.mem_get_info()
             print(f"\nGPU Memory Usage: {((total - free)/1024**3):.2f}GB / {total/1024**3:.2f}GB")

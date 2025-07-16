@@ -30,12 +30,12 @@ PROMPTS_FILE="../../prompts/prompt_extend_2048_numprompts150.txt"
 CONCURRENCY=30
 TOTAL_GPUS=8
 #OUTPUT_DIR="./sweep_configs/a100_40g"
-#OUTPUT_DIR="./test"
+OUTPUT_DIR="./test"
 # Base command for the Python benchmark script
 #QPS=0 - use prompy mode
-QPS=25
+QPS=15
+#OUTPUT_DIR="./vllm_output/a100_p4d/qps$QPS"
 
-OUTPUT_DIR="./vllm_output/a100_p4d/qps$QPS"
 if [ -n "${QPS:-}" ]; then
     BASE_CMD="python3 bench_latency.py \
       --model $MODEL_NAME \
