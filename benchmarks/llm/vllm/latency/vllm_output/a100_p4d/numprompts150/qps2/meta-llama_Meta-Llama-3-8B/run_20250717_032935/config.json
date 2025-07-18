@@ -1,0 +1,23 @@
+{
+    "prompts_file": null,
+    "trace": null,
+    "qps_mode": true,
+    "model": "meta-llama/Meta-Llama-3-8B",
+    "download_dir": null,
+    "tensor_parallel_size": 2,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 4,
+    "max_num_batched_tokens": 512,
+    "max_num_seqs": 512,
+    "concurrency": 8,
+    "warmup_requests": 5,
+    "qps": 2.0,
+    "qps_prompts_file": "../../prompts/prompt_extend_2048_numprompts150.txt",
+    "num_requests": null,
+    "duration": null,
+    "max_tokens": 512,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "nsys": false,
+    "output_dir": "./vllm_output/a100_p4d/numprompts150/qps2"
+}
