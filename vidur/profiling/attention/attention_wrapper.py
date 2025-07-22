@@ -3,6 +3,7 @@ from typing import List
 
 import numpy as np
 import torch
+import types
 from sarathi.config import ParallelConfig
 from sarathi.model_executor.attention import (
     AttentionBackend,
@@ -14,6 +15,16 @@ from vidur.profiling.attention.attention_input import AttentionInput
 from vidur.profiling.attention.sequence_proxy import SequenceMetadataProxy
 from vidur.profiling.common.model_config import ModelConfig
 from vidur.profiling.common.timer_stats_store import TimerStatsStore
+
+# Create a minimal MetricsStore implementation to avoid dependency issues
+from sarathi.metrics.metrics_store import MetricsStore
+
+# Create a dummy instance with minimal required methods
+MetricsStore._instance = types.SimpleNamespace()
+MetricsStore._instance.is_op_enabled = lambda **kwargs: False
+MetricsStore._instance.push_operation_metrics = lambda **kwargs: None
+MetricsStore._instance.push_operation_metrics_events = lambda **kwargs: None
+MetricsStore.get_instance = classmethod(lambda cls: cls._instance)
 
 WARMUP_STEPS = 2
 ACTIVE_STEPS = 5
