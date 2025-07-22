@@ -1,0 +1,18 @@
+{
+    "prompts_file": "../../prompts/prompt_extend_2048_numprompts30.txt",
+    "trace": null,
+    "model": "meta-llama/Meta-Llama-3-8B",
+    "download_dir": null,
+    "tensor_parallel_size": 1,
+    "pipeline_parallel_size": 1,
+    "data_parallel_size": 1,
+    "max_num_batched_tokens": 512,
+    "max_num_seqs": 512,
+    "concurrency": 30,
+    "warmup_requests": 5,
+    "max_tokens": 512,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "nsys": false,
+    "output_dir": "./test"
+}
