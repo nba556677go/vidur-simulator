@@ -4,6 +4,12 @@ from typing import List
 import numpy as np
 import torch
 import types
+import sarathi.metrics.cuda_timer
+from vidur.profiling.common.cuda_timer import CudaTimer
+
+# Monkey patch Sarathi to use Vidur's CudaTimer before importing attention code
+sarathi.metrics.cuda_timer.CudaTimer = CudaTimer
+
 from sarathi.config import ParallelConfig
 from sarathi.model_executor.attention import (
     AttentionBackend,
@@ -18,12 +24,13 @@ from vidur.profiling.common.timer_stats_store import TimerStatsStore
 
 # Create a minimal MetricsStore implementation to avoid dependency issues
 from sarathi.metrics.metrics_store import MetricsStore
+from vidur.profiling.common.cuda_timer import CudaTimer
 
 # Create a dummy instance with minimal required methods
 MetricsStore._instance = types.SimpleNamespace()
-MetricsStore._instance.is_op_enabled = lambda **kwargs: False
-MetricsStore._instance.push_operation_metrics = lambda **kwargs: None
-MetricsStore._instance.push_operation_metrics_events = lambda **kwargs: None
+MetricsStore._instance.is_op_enabled = lambda **kwargs: True
+MetricsStore._instance.push_operation_metrics = lambda *args, **kwargs: None
+MetricsStore._instance.push_operation_metrics_events = lambda *args, **kwargs: None
 MetricsStore.get_instance = classmethod(lambda cls: cls._instance)
 
 WARMUP_STEPS = 2
