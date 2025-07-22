@@ -165,12 +165,12 @@ cache
 cache_random_forrest
 cache_linear_regression
 cache*
-simulator_outputs
-simulator_output
+
+#simulator_output
 wandb
 train.zip
-profiling_outputs
-profiling_outputs_*
+#profiling_outputs
+#profiling_outputs_*
 experiments/profiling/mlp.csv
 experiments/profiling/attention.csv
 config_optimizer_output
@@ -192,3 +192,6 @@ benchmarks/llm/vllm/latency/sweep_configs
 #remove .sqlite, .nsys-rep
 *.sqlite
 *.nsys-rep
+
+
+simulator_output/[0-9][0-9][0-9][0-9]-*
