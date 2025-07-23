@@ -99,6 +99,28 @@ To format code, execute the following command:
 make format
 ```
 
+## benchmarking
+create vllm benchmark environment for ground truth comparison. 
+* export huggingface token using export
+```
+export HF_TOKEN=<your_huggingface_token>
+```
+* build image and run
+```
+cd benchmark/llm/vllm
+#build vllm image
+docker build -t vllm:dev . 
+#assume the repo is installed under $HOME
+docker run -it --gpus all --ipc=host -v  $HOME/vidur-simulator:$HOME/vidur-simulator/ -v ~/.cache/huggingface:/root/.cache/huggingface -e RAY_CGRAPH_get_timeout=300 -e RAY_CGRAPH_submit_timeout=300 -e HF_TOKEN vllm:dev bash
+```
+
+* run benchmark script. change parameters within the script
+```
+cd  $HOME/vidur-simulator/benchmarks/llm/vllm/latency/
+bash run_bench_latency.sh 
+```
+
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
