@@ -212,3 +212,19 @@ class Qwen72BModelConfig(QwenModelConfig):
     @staticmethod
     def get_name():
         return "Qwen/Qwen-72B"
+
+
+@dataclass
+class Qwen3_4BModelConfig(QwenModelConfig):
+    num_layers: int = 36
+    num_q_heads: int = 32
+    num_kv_heads: int = 8
+    embedding_dim: int = 2560
+    mlp_hidden_dim: int = 9728
+    max_model_len: int = 40960
+    vocab_size: int = 151936
+    rope_theta: Optional[float] = 1000000
+
+    @staticmethod
+    def get_name():
+        return "Qwen/Qwen3-4B"
