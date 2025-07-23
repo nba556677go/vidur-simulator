@@ -1,3 +1,5 @@
 simulator_output/** filter=lfs diff=lfs merge=lfs -text
 profiling_outputs/** filter=lfs diff=lfs merge=lfs -text
 benchmarks/llm/vllm/latency/vllm_output/** filter=lfs diff=lfs merge=lfs -text
+data/profiling/compute/** filter=lfs diff=lfs merge=lfs -text
+data/profiling/network/** filter=lfs diff=lfs merge=lfs -text
