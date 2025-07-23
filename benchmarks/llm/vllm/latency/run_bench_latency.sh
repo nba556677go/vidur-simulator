@@ -33,7 +33,8 @@ TOTAL_GPUS=8
 #OUTPUT_DIR="./test"
 # Base command for the Python benchmark script
 #QPS=0 - use prompy mode
-QPS_VALUES=(0.25 0.5 2 8)
+#QPS_VALUES=(0.25 0.5 2 8)
+QPS_VALUES=(5)
 
 for qps in "${QPS_VALUES[@]}"; do
     OUTPUT_DIR="./vllm_output/a100_p4d/numprompts150/qps$qps"
