@@ -125,8 +125,9 @@ class VidurParser:
 
 def main():
     # Example usage
-    base_dir = "/home/ec2-user/s3-local/vidur_outputs/a100_default/qps0.25"
-    output_dir = "./vidur_results/a100_default/qps0.25"
+    #base_dir = "/home/ec2-user/s3-local/vidur_outputs/a100_default/qps0.25"
+    base_dir  = "/home/ec2-user/vidur-simulator/simulator_output/a100_p4d_model_reprofiled/qps8.0"
+    output_dir = "./vidur_results/a100_default_model_reprofiled/chunk8192/qps8.0"
     
     parser = VidurParser(base_dir, output_dir)
     results_df = parser.parse_all()
