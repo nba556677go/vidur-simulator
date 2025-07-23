@@ -70,6 +70,14 @@ class VLLMBenchParser(VidurParser):
                 'inter_token_p50': latency_percentiles.get('inter_token_latency', {}).get('inter_token_p50'),
                 'inter_token_p90': latency_percentiles.get('inter_token_latency', {}).get('inter_token_p90'),
                 'inter_token_p99': latency_percentiles.get('inter_token_latency', {}).get('inter_token_p99'),
+                'schedule_delay_avg': latency_percentiles.get('schedule_delay', {}).get('schedule_delay_avg'),
+                'schedule_delay_p50': latency_percentiles.get('schedule_delay', {}).get('schedule_delay_p50'),
+                'schedule_delay_p90': latency_percentiles.get('schedule_delay', {}).get('schedule_delay_p90'),
+                'schedule_delay_p99': latency_percentiles.get('schedule_delay', {}).get('schedule_delay_p99'),
+                'e2e_latency_avg': latency_percentiles.get('e2e_latency', {}).get('e2e_avg'),
+                'e2e_latency_p50': latency_percentiles.get('e2e_latency', {}).get('e2e_p50'),
+                'e2e_latency_p90': latency_percentiles.get('e2e_latency', {}).get('e2e_p90'),
+                'e2e_latency_p99': latency_percentiles.get('e2e_latency', {}).get('e2e_p99'),
                 'throughput': summary.get('overall_throughput_tokens_per_sec'),
                 'total_requests': summary.get('total_requests'),
                 'total_input_tokens': summary.get('total_input_tokens'),
@@ -132,6 +140,14 @@ class VLLMBenchParser(VidurParser):
                                 'Inter_Token_P50': metrics['inter_token_p50'],
                                 'Inter_Token_P90': metrics['inter_token_p90'],
                                 'Inter_Token_P99': metrics['inter_token_p99'],
+                                'Schedule_Delay_Avg': metrics['schedule_delay_avg'],
+                                'Schedule_Delay_P50': metrics['schedule_delay_p50'],
+                                'Schedule_Delay_P90': metrics['schedule_delay_p90'],
+                                'Schedule_Delay_P99': metrics['schedule_delay_p99'],
+                                'E2E_Latency_Avg': metrics['e2e_latency_avg'],
+                                'E2E_Latency_P50': metrics['e2e_latency_p50'],
+                                'E2E_Latency_P90': metrics['e2e_latency_p90'],
+                                'E2E_Latency_P99': metrics['e2e_latency_p99'],
                                 'Throughput': metrics['throughput'],
                                 'Total_Requests': metrics['total_requests'],
                                 'Total_Input_Tokens': metrics['total_input_tokens'],
@@ -141,27 +157,31 @@ class VLLMBenchParser(VidurParser):
         return pd.DataFrame(results_list)
 
 def main():
-    QPS=8
-    base_dir = f"../benchmarks/llm/vllm/latency/vllm_output/a100_p4d/numprompts150/qps{QPS}"
-    output_dir = f"./vllm_bench_results/a100_p4d/nprompt150/qps{QPS}"
-    
-    parser = VLLMBenchParser(base_dir, output_dir)
-    results_df = parser.parse_all()
-    
-    # Save results
-    csv_path, summary_path = parser.save_results(results_df)
-    
-    print(f"\nResults saved to: {csv_path}")
-    print(f"Summary saved to: {summary_path}")
-    
-    print("\nResults summary:")
-    print(results_df.to_string())
-    
-    # Print configuration-wise summary
-    print("\nAverage metrics by configuration:")
-    numeric_columns = results_df.select_dtypes(include=[np.number]).columns
-    summary = results_df.groupby(['Model', 'Num_Replicas', 'Tensor_Parallel', 'Pipeline_Parallel'])[numeric_columns].mean()
-    print(summary)
+    QPS=[2,5,8]
+    DEVICES = ["l40s_g6e48"]
+    for qps in QPS:
+        for device in DEVICES:
+            
+            base_dir = f"../benchmarks/llm/vllm/latency/vllm_output/{device}/numprompts150/qps{qps}"
+            output_dir = f"./vllm_bench_results/{device}/nprompt150/qps{qps}"
+
+            parser = VLLMBenchParser(base_dir, output_dir)
+            results_df = parser.parse_all()
+
+            # Save results
+            csv_path, summary_path = parser.save_results(results_df)
+
+            print(f"\nResults saved to: {csv_path}")
+            print(f"Summary saved to: {summary_path}")
+
+            print("\nResults summary:")
+            print(results_df.to_string())
+
+            # Print configuration-wise summary
+            print("\nAverage metrics by configuration:")
+            numeric_columns = results_df.select_dtypes(include=[np.number]).columns
+            summary = results_df.groupby(['Model', 'Num_Replicas', 'Tensor_Parallel', 'Pipeline_Parallel'])[numeric_columns].mean()
+            print(summary)
 
 
 if __name__ == "__main__":

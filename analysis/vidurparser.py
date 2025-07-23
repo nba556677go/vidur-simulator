@@ -126,27 +126,30 @@ class VidurParser:
 def main():
     # Example usage
     #base_dir = "/home/ec2-user/s3-local/vidur_outputs/a100_default/qps0.25"
-    base_dir  = "/home/ec2-user/vidur-simulator/simulator_output/a100_p4d_model_reprofiled/qps8.0"
-    output_dir = "./vidur_results/a100_default_model_reprofiled/chunk8192/qps8.0"
-    
-    parser = VidurParser(base_dir, output_dir)
-    results_df = parser.parse_all()
-    
-    # Save results
-    csv_path, summary_path = parser.save_results(results_df)
-    
-    # Print summary
-    print(f"\nResults saved to: {csv_path}")
-    print(f"Summary saved to: {summary_path}")
-    
-    print("\nResults summary:")
-    print(results_df.to_string())
-    
-    # Print configuration-wise summary
-    print("\nAverage metrics by configuration:")
-    numeric_columns = results_df.select_dtypes(include=[np.number]).columns
-    summary = results_df.groupby(['Model', 'Num_Replicas', 'Tensor_Parallel', 'Pipeline_Parallel'])[numeric_columns].mean()
-    print(summary)
+    QPS=[2, 5, 8]
+    for qps in QPS:
+        profiled_name = "network_l40s_g6e48_model_a100_p4d"
+        base_dir  = f"/home/ec2-user/vidur-simulator/simulator_output/{profiled_name}/qps{qps}"
+        output_dir = f"./vidur_results/{profiled_name}/chunk8192/qps{qps}"
+        
+        parser = VidurParser(base_dir, output_dir)
+        results_df = parser.parse_all()
+        
+        # Save results
+        csv_path, summary_path = parser.save_results(results_df)
+        
+        # Print summary
+        print(f"\nResults saved to: {csv_path}")
+        print(f"Summary saved to: {summary_path}")
+        
+        print("\nResults summary:")
+        print(results_df.to_string())
+        
+        # Print configuration-wise summary
+        print("\nAverage metrics by configuration:")
+        numeric_columns = results_df.select_dtypes(include=[np.number]).columns
+        summary = results_df.groupby(['Model', 'Num_Replicas', 'Tensor_Parallel', 'Pipeline_Parallel'])[numeric_columns].mean()
+        print(summary)
 
 if __name__ == "__main__":
     main()

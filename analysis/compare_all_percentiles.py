@@ -131,19 +131,27 @@ def plot_results(df, output_dir):
 
 def main():
     # This main function is IDENTICAL to your original script
-    vllm_bench_base_dir = "vllm_bench_results/a100_p4d/nprompt150"
-    vidur_base_dir = "vidur_results/a100_default_model_reprofiled/chunk8192"
-    qps_values = [8]
+    vidur_profile = "network_l40s_g6e48_model_a100_p4d"
+    vllm_device = "l40s_g6e48"
+    vidur_base_dir = f"vidur_results/{vidur_profile}/chunk8192"
+    vllm_bench_base_dir = f"vllm_bench_results/{vllm_device}/nprompt150"
+
+    qps_values = [2, 5, 8]
+    #map qps with float
+    qps_dir_map = {qps: str(qps) for qps in qps_values}
+    #append qps_values with 2,5,8,..., 2.0,5.0,8.0... based on qps_values. d
     
-    vllm_qps_dir_map = { 0.25: "0.25", 0.5: "0.5", 2: "2", 8: "8", 15: "15", 25: "25" }
-    vidur_qps_dir_map = { 0.25: "0.25", 0.5: "0.5", 2: "2.0", 8: "8.0", 15: "15.0", 25: "25.0" }
+    vllm_qps_dir_map = { 0.25: "0.25", 0.5: "0.5", 2: "2", 5:"5",  8: "8", 15: "15", 25: "25" }
+    vidur_qps_dir_map = { 0.25: "0.25", 0.5: "0.5", 2: "2.0", 5:"5.0", 8: "8.0", 15: "15.0", 25: "25.0" }
     
     base_dir = os.path.dirname(os.path.abspath(__file__))
     results = []
     
     for qps in qps_values:
-        vllm_qps_dir = vllm_qps_dir_map.get(qps, str(qps))
-        vidur_qps_dir = vidur_qps_dir_map.get(qps, str(qps))
+        vllm_qps_dir = qps_dir_map.get(qps, str(qps))
+        vidur_qps_dir = qps_dir_map.get(qps, str(qps))
+        #vllm_qps_dir = vllm_qps_dir_map.get(qps, str(qps))
+        #vidur_qps_dir = vidur_qps_dir_map.get(qps, str(qps))
         
         vllm_dir = os.path.join(base_dir, f"{vllm_bench_base_dir}/qps{vllm_qps_dir}")
         if not os.path.exists(vllm_dir):

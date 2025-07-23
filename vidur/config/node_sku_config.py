@@ -70,3 +70,13 @@ class P4dA100_40gNvlinkNodeSKUConfig(BaseNodeSKUConfig):
     @staticmethod
     def get_type():
         return NodeSKUType.P4D_A100_40G_NVLINK
+
+
+@dataclass
+class L40S_G6E48NodeSKUConfig(BaseNodeSKUConfig):
+    device_sku_type: DeviceSKUType = DeviceSKUType.A100
+    num_devices_per_node: int = 8
+
+    @staticmethod
+    def get_type():
+        return NodeSKUType.L40S_G6E48

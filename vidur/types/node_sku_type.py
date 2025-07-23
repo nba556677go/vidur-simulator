@@ -8,3 +8,4 @@ class NodeSKUType(BaseIntEnum):
     A100_DGX = 4
     H100_DGX = 5
     P4D_A100_40G_NVLINK = 6
+    L40S_G6E48 = 7

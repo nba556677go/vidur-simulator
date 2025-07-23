@@ -47,7 +47,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 TOTAL_GPUS = args.total_gpus
-BASE_LOG_DIR = f"{args.log_dir}/qps{args.qps}"
+BASE_LOG_DIR = f"{args.log_dir}/qps{int(args.qps) if args.qps > 1 else args.qps}"
 NETWORK_DEVICE = args.network_device
 
 # Setup logging based on debug flag
