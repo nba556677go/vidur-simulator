@@ -30,3 +30,7 @@ dev = [
     "flake8==7.1.1",
     "isort==5.13.2",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vidur", "vidur.*"]
