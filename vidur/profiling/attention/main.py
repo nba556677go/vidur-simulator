@@ -197,12 +197,18 @@ def main():
         model_config = ModelConfig.from_model_name(model)
         model_config.max_model_len = args.max_seq_len
         for num_tensor_parallel_workers in args.num_tensor_parallel_workers:
+            parallel_config = ParallelConfig(
+                tensor_parallel_size=num_tensor_parallel_workers,
+                pipeline_parallel_size=1,
+            )
+            # Skip if tensor parallel size would result in 0 KV heads
+            if model_config.get_num_kv_heads(parallel_config) == 0:
+                print(f"Skipping {model} with TP={num_tensor_parallel_workers}: would result in 0 KV heads")
+                continue
+            
             max_num_blocks = get_max_num_blocks(
                 model_config,
-                ParallelConfig(
-                    tensor_parallel_size=num_tensor_parallel_workers,
-                    pipeline_parallel_size=1,
-                ),
+                parallel_config,
                 args.block_size,
                 dtype,
                 gpu_memory_utilization=0.9,
@@ -223,6 +229,10 @@ def main():
     for model in args.models:
         result_df = pd.DataFrame()
         for num_tensor_parallel_workers in args.num_tensor_parallel_workers:
+            # Skip if this configuration was filtered out
+            if (model, num_tensor_parallel_workers) not in total_combos:
+                continue
+                
             result_df = pd.concat(
                 [
                     result_df,
