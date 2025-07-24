@@ -61,6 +61,15 @@ class H100DgxNodeSKUConfig(BaseNodeSKUConfig):
     def get_type():
         return NodeSKUType.H100_DGX
 
+@dataclass
+class H100_P5NodeSKUConfig(BaseNodeSKUConfig):
+    device_sku_type: DeviceSKUType = DeviceSKUType.H100_P5
+    num_devices_per_node: int = 8
+
+    @staticmethod
+    def get_type():
+        return NodeSKUType.H100_P5
+
 
 @dataclass
 class P4dA100_40gNvlinkNodeSKUConfig(BaseNodeSKUConfig):
@@ -74,7 +83,7 @@ class P4dA100_40gNvlinkNodeSKUConfig(BaseNodeSKUConfig):
 
 @dataclass
 class L40S_G6E48NodeSKUConfig(BaseNodeSKUConfig):
-    device_sku_type: DeviceSKUType = DeviceSKUType.A100
+    device_sku_type: DeviceSKUType = DeviceSKUType.L40S
     num_devices_per_node: int = 8
 
     @staticmethod

@@ -157,8 +157,9 @@ class VLLMBenchParser(VidurParser):
         return pd.DataFrame(results_list)
 
 def main():
-    QPS=[2,5,8]
-    DEVICES = ["l40s_g6e48"]
+    QPS=[15, 20, 40]
+    #QPS = [2,5,8]
+    DEVICES = ["h100_p5"]
     for qps in QPS:
         for device in DEVICES:
             

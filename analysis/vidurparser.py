@@ -126,11 +126,14 @@ class VidurParser:
 def main():
     # Example usage
     #base_dir = "/home/ec2-user/s3-local/vidur_outputs/a100_default/qps0.25"
-    QPS=[2, 5, 8]
+    QPS=[15, 20 , 40]
+    profile_name = "h100_p5"
+    compute_profile = "h100_p5"
+    network_device = "h100_p5"
     for qps in QPS:
-        profiled_name = "network_l40s_g6e48_model_a100_p4d"
-        base_dir  = f"/home/ec2-user/vidur-simulator/simulator_output/{profiled_name}/qps{qps}"
-        output_dir = f"./vidur_results/{profiled_name}/chunk8192/qps{qps}"
+        
+        base_dir  = f"/home/ec2-user/vidur-simulator/simulator_output/{profile_name}/compute_{compute_profile}/network_{network_device}/qps{qps}"
+        output_dir = f"./vidur_results/{profile_name}/compute_{compute_profile}/network_{network_device}/chunk8192/qps{qps}"
         
         parser = VidurParser(base_dir, output_dir)
         results_df = parser.parse_all()

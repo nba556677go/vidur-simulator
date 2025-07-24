@@ -41,13 +41,19 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    '--model',
+    type=str,
+    default='meta-llama/Meta-Llama-3-8B',
+    help='Model name to use. Default is meta-llama/Meta-Llama-3-8B'
+)
+parser.add_argument(
     '--debug',
     action='store_true',
     help='Enable debug logging'
 )
 args = parser.parse_args()
 TOTAL_GPUS = args.total_gpus
-BASE_LOG_DIR = f"{args.log_dir}/qps{int(args.qps) if args.qps > 1 else args.qps}"
+BASE_LOG_DIR = f"{args.log_dir}/compute_{args.replica_config_device}/network_{network_device}/qps{int(args.qps) if args.qps > 1 else args.qps}"
 NETWORK_DEVICE = args.network_device
 
 # Setup logging based on debug flag
@@ -79,7 +85,7 @@ replica_config_pipeline_parallel_size_list = [1]
 base_command = (
     "python -m vidur.main "
     "--time_limit 10000 "
-    "--replica_config_model_name meta-llama/Meta-Llama-3-8B "
+    f"--replica_config_model_name {args.model} "
     "--request_generator_config_type synthetic "
     "--synthetic_request_generator_config_num_requests 150 "
     "--length_generator_config_type fixed "

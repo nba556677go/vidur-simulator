@@ -6,3 +6,4 @@ class DeviceSKUType(BaseIntEnum):
     A100 = 2
     H100 = 3
     L40S = 4
+    H100_P5 = 5
