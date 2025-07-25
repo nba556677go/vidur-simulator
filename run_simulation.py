@@ -53,7 +53,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 TOTAL_GPUS = args.total_gpus
-BASE_LOG_DIR = f"{args.log_dir}/compute_{args.replica_config_device}/network_{network_device}/qps{int(args.qps) if args.qps > 1 else args.qps}"
+BASE_LOG_DIR = f"{args.log_dir}/compute_{args.replica_config_device}/network_{args.network_device}/{args.model}/qps{int(args.qps) if args.qps > 1 else args.qps}"
 NETWORK_DEVICE = args.network_device
 
 # Setup logging based on debug flag
