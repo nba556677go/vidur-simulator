@@ -1,7 +1,7 @@
 import hashlib
 from dataclasses import dataclass
 from itertools import product
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 @dataclass
@@ -43,6 +43,30 @@ class TraceConfig:
             "vllm_scheduler_config_max_tokens_in_batch": self.max_seq_len,
             "cache_config_enable_prefix_caching": None,
         }
+
+
+@dataclass
+class FixedLengthConfig:
+    name: str
+    prefill_tokens: int
+    decode_tokens: int
+    enable_prefix_caching: bool
+
+    def get_key(self):
+        return f"{self.name}_p{self.prefill_tokens}_d{self.decode_tokens}"
+
+    def to_config_dict(self):
+        config = {
+            "request_generator_config_type": "synthetic",
+            "length_generator_config_type": "fixed",
+            "fixed_request_length_generator_config_prefill_tokens": self.prefill_tokens,
+            "fixed_request_length_generator_config_decode_tokens": self.decode_tokens,
+            "vllm_scheduler_config_max_tokens_in_batch": self.prefill_tokens + self.decode_tokens,
+       }
+       # Only add prefix caching if explicitly enabled
+        if self.enable_prefix_caching:
+            config["cache_config_enable_prefix_caching"] = True
+        return config
 
 
 @dataclass
@@ -205,7 +229,7 @@ class JobConfig:
         search_config: SearchConfig,
         model_config: ModelConfig,
         cluster_config: ClusterConfig,
-        trace_config: TraceConfig,
+        length_config: Union[TraceConfig, FixedLengthConfig],
         global_scheduler_config: GlobalSchedulerConfig,
         request_queue_config: RequestQueueConfig,
         replica_scheduler_config: ReplicaSchedulerConfig,
@@ -216,7 +240,7 @@ class JobConfig:
     ):
         self.model_config = model_config
         self.cluster_config = cluster_config
-        self.trace_config = trace_config
+        self.length_config = length_config
         self.global_scheduler_config = global_scheduler_config
         self.request_queue_config = request_queue_config
         self.replica_scheduler_config = replica_scheduler_config
@@ -233,9 +257,9 @@ class JobConfig:
         self.search_for = search_config.search_for
 
     def is_valid(self):
-        is_model_trace_match = (
+        is_model_length_match = (
             self.model_config.name == self.search_config.model
-            and self.trace_config.name == self.search_config.trace
+            and self.length_config.name == self.search_config.trace
         )
         is_tp_degree_valid = (
             self.model_config.is_tensor_parallel_degree_valid(
@@ -249,12 +273,12 @@ class JobConfig:
             and self.start_num_replicas == 1
             and self.global_scheduler_config.scheduler != "round_robin"
         )
-        return is_model_trace_match and is_tp_degree_valid and is_global_scheduler_valid
+        return is_model_length_match and is_tp_degree_valid and is_global_scheduler_valid
 
     def get_key(self):
         return (
             f"{self.model_config.get_key()}"
-            f"_{self.trace_config.get_key()}"
+            f"_{self.length_config.get_key()}"
             f"_{self.cluster_config.get_key()}"
             f"_{self.global_scheduler_config.get_key()}"
             f"_{self.request_queue_config.get_key()}"
@@ -268,7 +292,7 @@ class JobConfig:
         return (
             f"Model: {self.model_config.name}"
             f", TP: {self.num_tensor_parallel_workers}, PP: {self.num_pipeline_stages}"
-            f", Trace: {self.trace_config.name}"
+            f", Length: {self.length_config.name}"
             f", Device: {self.cluster_config.network_device}"
             f", Global Scheduler: {self.global_scheduler_config.scheduler}"
             f", Request Queue: {self.request_queue_config.name}"
@@ -286,7 +310,7 @@ class JobConfig:
         return {
             **self.model_config.to_config_dict(),
             **self.cluster_config.to_config_dict(),
-            **self.trace_config.to_config_dict(),
+            **self.length_config.to_config_dict(),
             **self.global_scheduler_config.to_config_dict(),
             **self.request_queue_config.to_config_dict(),
             **self.replica_scheduler_config.to_config_dict(),
@@ -302,11 +326,18 @@ class JobConfig:
     @classmethod
     def generate_job_configs(cls, config: dict):
         job_configs = []
+        # Get length configs (either traces or fixed_lengths)
+        length_configs = []
+        if "traces" in config:
+            length_configs.extend([TraceConfig(**tc) for tc in config["traces"]])
+        if "fixed_lengths" in config:
+            length_configs.extend([FixedLengthConfig(**fc) for fc in config["fixed_lengths"]])
+        
         for (
             search_config,
             model_config,
             cluster_config,
-            trace_config,
+            length_config,
             global_scheduler_config,
             request_queue_config,
             replica_scheduler_config,
@@ -318,7 +349,7 @@ class JobConfig:
             config["search_configs"],
             config["models"],
             config["clusters"],
-            config["traces"],
+            length_configs,
             config["global_schedulers"],
             config["request_queues"],
             config["replica_schedulers"],
@@ -331,7 +362,7 @@ class JobConfig:
                 SearchConfig(**search_config),
                 ModelConfig(**model_config),
                 ClusterConfig(**cluster_config),
-                TraceConfig(**trace_config),
+                length_config,
                 GlobalSchedulerConfig(**global_scheduler_config),
                 RequestQueueConfig(**request_queue_config),
                 ReplicaSchedulerConfig(**replica_scheduler_config),
@@ -351,7 +382,14 @@ class JobConfig:
     def generate_unique_model_job_configs(cls, config: dict, num_requests: int = 32):
         job_configs = []
 
-        trace_config = TraceConfig(**config["traces"][0])
+        # Get first length config (either trace or fixed_length)
+        if "traces" in config:
+            length_config = TraceConfig(**config["traces"][0])
+        elif "fixed_lengths" in config:
+            length_config = FixedLengthConfig(**config["fixed_lengths"][0])
+        else:
+            raise ValueError("No traces or fixed_lengths found in config")
+            
         global_scheduler_config = GlobalSchedulerConfig(
             **config["global_schedulers"][0]
         )
@@ -361,8 +399,12 @@ class JobConfig:
         )
         slo_configs = SloConfigs(**config["slo_configs"][0])
         batch_size = config["batch_sizes"][0]
-        # set pp_dimensions to 2 because it covers all the options
-        pp_dimensions = [2]
+        # set pp_dimensions based on replica scheduler
+        replica_scheduler = config["replica_schedulers"][0]
+        if replica_scheduler.get("scheduler") == "vllm_v1":
+            pp_dimensions = [1]
+        else:
+            pp_dimensions = [2]
 
         for model_config, cluster_config, tp_dimension, pp_dimension in product(
             config["models"],
@@ -371,7 +413,7 @@ class JobConfig:
             pp_dimensions,
         ):
             search_config = SearchConfig(
-                trace=trace_config.name,
+                trace=length_config.name,
                 model=model_config["name"],
                 search_for="qps",
                 num_requests=num_requests,
@@ -382,7 +424,7 @@ class JobConfig:
                 search_config,
                 ModelConfig(**model_config),
                 ClusterConfig(**cluster_config),
-                trace_config,
+                length_config,
                 global_scheduler_config,
                 request_queue_config,
                 replica_scheduler_config,
