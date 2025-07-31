@@ -131,14 +131,15 @@ def plot_results(df, output_dir):
 
 def main():
     # This main function is IDENTICAL to your original script
-    vidur_profile = "a100_default_model_reprofiled"
-    vidur_compute_profile = "a100_p4d"
-    vidur_network_device = "a100_dgx"
-    vllm_device = "a100_p4d"
-    vidur_base_dir = f"vidur_results/{vidur_profile}/compute_{vidur_compute_profile}/network_{vidur_network_device}/chunk8192"
+    vidur_profile = "h100_p5"
+    vidur_compute_profile = "h100_p5"
+    vidur_network_device = "h100_p5"
+    model = "Qwen/Qwen2.5-7B"
+    vllm_device = "h100_p5"
+    vidur_base_dir = f"vidur_results/{vidur_profile}/compute_{vidur_compute_profile}/network_{vidur_network_device}/{model}/chunk8192"
     vllm_bench_base_dir = f"vllm_bench_results/{vllm_device}/nprompt150"
-
-    qps_values = [2, 5, 8]
+    
+    qps_values = [8,15,20,40]
     #qps_values.extend([15,20,40])
     #map qps with float
     qps_dir_map = {qps: str(qps) for qps in qps_values}
@@ -167,6 +168,7 @@ def main():
             continue
         vllm_path = os.path.join(vllm_dir, vllm_files[0])
         vllm_df = pd.read_csv(vllm_path)
+        vllm_df = vllm_df[vllm_df['Model'] == model]
         
         vidur_dir = os.path.join(base_dir, f"{vidur_base_dir}/qps{vidur_qps_dir}")
         if not os.path.exists(vidur_dir):

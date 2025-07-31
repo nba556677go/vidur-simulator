@@ -157,7 +157,7 @@ class VLLMBenchParser(VidurParser):
         return pd.DataFrame(results_list)
 
 def main():
-    QPS=[15, 20, 40]
+    QPS=[8, 15, 20, 40]
     #QPS = [2,5,8]
     DEVICES = ["h100_p5"]
     for qps in QPS:
@@ -165,7 +165,6 @@ def main():
             
             base_dir = f"../benchmarks/llm/vllm/latency/vllm_output/{device}/numprompts150/qps{qps}"
             output_dir = f"./vllm_bench_results/{device}/nprompt150/qps{qps}"
-
             parser = VLLMBenchParser(base_dir, output_dir)
             results_df = parser.parse_all()
 

@@ -126,33 +126,35 @@ class VidurParser:
 def main():
     # Example usage
     #base_dir = "/home/ec2-user/s3-local/vidur_outputs/a100_default/qps0.25"
-    QPS=[15, 20 , 40]
+    QPS=[8, 15, 20 , 25, 40]
     profile_name = "h100_p5"
     compute_profile = "h100_p5"
     network_device = "h100_p5"
+    models = ["Qwen/Qwen2.5-7B"]
     for qps in QPS:
+        for model in models:
         
-        base_dir  = f"/home/ec2-user/vidur-simulator/simulator_output/{profile_name}/compute_{compute_profile}/network_{network_device}/qps{qps}"
-        output_dir = f"./vidur_results/{profile_name}/compute_{compute_profile}/network_{network_device}/chunk8192/qps{qps}"
-        
-        parser = VidurParser(base_dir, output_dir)
-        results_df = parser.parse_all()
-        
-        # Save results
-        csv_path, summary_path = parser.save_results(results_df)
-        
-        # Print summary
-        print(f"\nResults saved to: {csv_path}")
-        print(f"Summary saved to: {summary_path}")
-        
-        print("\nResults summary:")
-        print(results_df.to_string())
-        
-        # Print configuration-wise summary
-        print("\nAverage metrics by configuration:")
-        numeric_columns = results_df.select_dtypes(include=[np.number]).columns
-        summary = results_df.groupby(['Model', 'Num_Replicas', 'Tensor_Parallel', 'Pipeline_Parallel'])[numeric_columns].mean()
-        print(summary)
+            base_dir  = f"/home/ec2-user/vidur-simulator/simulator_output/{profile_name}/compute_{compute_profile}/network_{network_device}/{model}/qps{qps}"
+            output_dir = f"./vidur_results/{profile_name}/compute_{compute_profile}/network_{network_device}/{model}/chunk8192/qps{qps}"
+            
+            parser = VidurParser(base_dir, output_dir)
+            results_df = parser.parse_all()
+            
+            # Save results
+            csv_path, summary_path = parser.save_results(results_df)
+            
+            # Print summary
+            print(f"\nResults saved to: {csv_path}")
+            print(f"Summary saved to: {summary_path}")
+            
+            print("\nResults summary:")
+            print(results_df.to_string())
+            
+            # Print configuration-wise summary
+            print("\nAverage metrics by configuration:")
+            numeric_columns = results_df.select_dtypes(include=[np.number]).columns
+            summary = results_df.groupby(['Model', 'Num_Replicas', 'Tensor_Parallel', 'Pipeline_Parallel'])[numeric_columns].mean()
+            print(summary)
 
 if __name__ == "__main__":
     main()

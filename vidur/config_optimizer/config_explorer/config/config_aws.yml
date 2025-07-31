@@ -1,11 +1,11 @@
 clusters:
-  - device: h100
-    network_device: h100_p5
-    gpus_per_node: 8
+  #- device: h100
+  #  network_device: h100_p5
+  #  gpus_per_node: 8
+  #- device: a100
+  #  network_device: p4d_a100_40g_nvlink
+  #  gpus_per_node: 8
   - device: a100
-    network_device: p4d_a100_40g_nvlink
-    gpus_per_node: 8
-  - device: l40s_g6e48
     network_device: l40s_g6e48
     gpus_per_node: 8
 
@@ -35,12 +35,12 @@ replica_schedulers:
     chunk_size: 8192
     
 slo_configs:
-  - name: ttft_p99_150ms
+  - name: ttft_p99_300ms
     type: and
     quantile: 0.99
     slos:
       - metric: prefill_e2e_time
-        value: 0.15
+        value: 0.3
 
 #traces:
 #  - name: arxiv_150
@@ -54,8 +54,9 @@ fixed_lengths:
     decode_tokens: 512
     enable_prefix_caching: false
 
-
-batch_sizes: [32, 64, 128, 256, 512]
+#batch is for sarathi scheduler only
+#batch_sizes: [32, 64, 128, 256, 512]
+batch_sizes: [32]
 tp_dimensions: [1, 2, 4, 8]
 pp_dimensions: [1]
 

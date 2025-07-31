@@ -77,7 +77,7 @@ cluster_config_num_replicas_list = [1, 2, 4, 8]
 replica_config_tensor_parallel_size_list = [1, 2, 4, 8]
 replica_config_pipeline_parallel_size_list = [1]
 
-#cluster_config_num_replicas_list = [1]
+#cluster_config_num_replicas_list = [16]
 #replica_config_tensor_parallel_size_list = [1]
 #replica_config_pipeline_parallel_size_list = [1, 2, 4, 8]
 

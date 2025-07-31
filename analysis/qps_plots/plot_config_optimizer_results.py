@@ -1,0 +1,579 @@
+
+import os
+import json
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+import glob
+import csv
+
+def get_device_costs():
+    """
+    Parse the Plannable_Public EC2_US East.csv to get hourly costs for different device types
+    and include GPUs per node information
+    """
+    # Initialize with both cost and GPU counts
+    device_costs = {
+        'a100': {'cost': None, 'gpus_per_node': 8},  # p4d.24xlarge has 8 A100 GPUs
+        'h100': {'cost': None, 'gpus_per_node': 8},  # p5.48xlarge has 8 H100 GPUs
+        'l40s_g6e': {'cost': None, 'gpus_per_node': 8},  # g6e.48xlarge has 8 L40S GPUs
+    }
+    
+    # Instance type to device mapping
+    instance_to_device = {
+        'p4d.24xlarge': 'a100',
+        'p5.48xlarge': 'h100',
+        'g6e.48xlarge': 'l40s_g6e'
+    }
+    
+    csv_path = os.path.join(os.path.dirname(__file__), "Plannable_Public EC2_US East.csv")
+    
+    with open(csv_path, 'r') as f:
+        # The file uses semicolons as separators
+        reader = csv.DictReader(f, delimiter=';')
+        
+        for row in reader:
+            instance_type = row.get('AWS Instance Type', '').strip()
+            if instance_type in instance_to_device:
+                device = instance_to_device[instance_type]
+                
+                # Get the 2025 IMR cost (hourly rate)
+                try:
+                    cost = float(row.get('2025 IMR', '0'))
+                    device_costs[device]['cost'] = cost
+                except (ValueError, TypeError):
+                    pass
+    
+    # Print the costs and set fallback values if needed
+    print("Device information:")
+    fallback_costs = {
+        'a100': 4.73,  # p4d.24xlarge approximate cost
+        'h100': 11.85,  # p5.48xlarge approximate cost
+        'l40s_g6e': 4.68  # g6e.48xlarge approximate cost
+    }
+    
+    for device, info in device_costs.items():
+        # Use fallback values if costs weren't found
+        if info['cost'] is None:
+            info['cost'] = fallback_costs.get(device, 1.0)
+            print(f"  {device}: ${info['cost']:.2f} per hour (FALLBACK VALUE), {info['gpus_per_node']} GPUs per node")
+        else:
+            print(f"  {device}: ${info['cost']:.2f} per hour, {info['gpus_per_node']} GPUs per node")
+        
+    return device_costs
+
+# Directory containing the optimizer output
+CONFIG_DIR = "/home/ec2-user/vidur-simulator/config_optimizer_output_r8_r16/runs"
+base_dir = os.path.expanduser(CONFIG_DIR)
+# SLO limit example
+slo_limit = 0.2  # 200ms example for TTFT
+exec_slo = 7.8  # slo for total execution time
+inter_token_slo = 0.012  # 8ms in seconds
+# Data structure to hold results
+results = []
+
+# Get device costs
+device_costs = get_device_costs()
+
+# Walk through all run directories
+for run_dir in os.listdir(base_dir):
+    run_path = os.path.join(base_dir, run_dir)
+    if not os.path.isdir(run_path):
+        continue
+        
+    # Process each QPS directory
+    for qps_dir in os.listdir(run_path):
+        if not qps_dir.startswith('r8_q'):
+            continue
+            
+        # Extract QPS value from directory name
+        try:
+            qps = float(qps_dir.split('_q')[1])
+        except:
+            continue
+            
+        qps_path = os.path.join(run_path, qps_dir)
+        
+        # Find the timestamped directory
+        timestamp_dirs = [d for d in os.listdir(qps_path) if os.path.isdir(os.path.join(qps_path, d))]
+        if not timestamp_dirs:
+            continue
+            
+        # Use the first timestamped directory
+        timestamp_path = os.path.join(qps_path, timestamp_dirs[0])
+        
+        # Check if config.json and request_metrics.csv exist
+        config_path = os.path.join(timestamp_path, "config.json")
+        metrics_path = os.path.join(timestamp_path, "request_metrics.csv")
+        
+        if not (os.path.exists(config_path) and os.path.exists(metrics_path)):
+            continue
+            
+        # Parse config
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        # Extract relevant config details
+        replica_config = config.get('cluster_config', {}).get('replica_config', {})
+        num_replicas = config.get('cluster_config', {}).get('num_replicas', 0)
+        tensor_parallel_size = replica_config.get('tensor_parallel_size', 0)
+        num_pipeline_stages = replica_config.get('num_pipeline_stages', 0)
+        device = replica_config.get('device', 'Unknown')
+        network_device = replica_config.get('network_device', 'Unknown')
+        
+        # Extract token lengths (prefill and decode)
+        request_generator_config = config.get('request_generator_config', {})
+        length_generator_config = request_generator_config.get('length_generator_config', {})
+        prefill_tokens = length_generator_config.get('prefill_tokens', 0)
+        decode_tokens = length_generator_config.get('decode_tokens', 0)
+        
+        # Get scheduler info and related parameters
+        scheduler_config = config.get('scheduler_config', {})
+        replica_scheduler_config = config.get('replica_scheduler_config', {})
+        cluster_config = config.get('cluster_config', {})
+        
+        # Look for scheduler_type - need to check in several possible locations
+        scheduler_type = None
+        
+        # 1. Check in scheduler_config
+        if scheduler_type is None:
+            scheduler_type = scheduler_config.get('scheduler_type', None)
+            
+        # 2. Check in cluster_config -> replica_scheduler_config -> name
+        if scheduler_type is None and 'replica_scheduler_config' in cluster_config:
+            scheduler_type = cluster_config['replica_scheduler_config'].get('name', None)
+            
+        # 3. Check in global_scheduler_config -> name
+        if scheduler_type is None and 'global_scheduler_config' in cluster_config:
+            scheduler_type = cluster_config['global_scheduler_config'].get('name', None)
+            
+        # Default to Unknown if not found
+        if scheduler_type is None:
+            scheduler_type = "Unknown"
+        
+        # Get chunk_size - need to check in several possible locations
+        chunk_size = None
+        
+        # 1. Try cluster_config -> replica_scheduler_config
+        if chunk_size is None and 'replica_scheduler_config' in cluster_config:
+            chunk_size = cluster_config['replica_scheduler_config'].get('chunk_size', None)
+        
+        # 2. Try replica_scheduler_config directly (may be at top level)
+        if chunk_size is None:
+            chunk_size = replica_scheduler_config.get('chunk_size', None)
+            
+        # 3. Try scheduler_config -> replica_scheduler_config
+        if chunk_size is None:
+            scheduler_replica_config = scheduler_config.get('replica_scheduler_config', {})
+            chunk_size = scheduler_replica_config.get('chunk_size', None)
+            
+        # 4. Fall back to sarathi_chunk_size if needed
+        if chunk_size is None:
+            chunk_size = scheduler_config.get('sarathi_chunk_size', None)
+            
+        # Get batch size in similar way
+        sarathi_batch_size = None
+        
+        # 1. Try directly in scheduler_config
+        if sarathi_batch_size is None:
+            sarathi_batch_size = scheduler_config.get('batch_size', None)
+            
+        # 2. Try in replica_scheduler_config
+        if sarathi_batch_size is None and 'replica_scheduler_config' in cluster_config:
+            sarathi_batch_size = cluster_config['replica_scheduler_config'].get('batch_size_cap', None)
+        # Get model name
+        model_name = replica_config.get('model_name', 'Unknown')
+
+        # Read metrics
+        metrics_df = pd.read_csv(metrics_path)
+        
+        # Calculate P99 of prefill_e2e_time
+        p99_ttft = metrics_df['prefill_e2e_time'].quantile(0.99)
+        
+        # Calculate P99 and P50 of total request execution time from request_execution_time column
+        p99_exec_time = None
+        p50_exec_time = None
+        if 'request_execution_time' in metrics_df.columns:
+            p99_exec_time = metrics_df['request_execution_time'].quantile(0.99)
+            p50_exec_time = metrics_df['request_execution_time'].quantile(0.50)
+        
+        # Calculate P99 of decode_time_execution_plus_preemption_normalized
+        p99_inter_token_latency = None
+        if 'decode_time_execution_plus_preemption_normalized' in metrics_df.columns:
+            p99_inter_token_latency = metrics_df['decode_time_execution_plus_preemption_normalized'].quantile(0.99)
+        
+        # Store the result
+        results.append({
+            'run_id': run_dir,
+            'qps': qps,
+            'p99_ttft': p99_ttft,
+            'p99_exec_time': p99_exec_time,
+            'p50_exec_time': p50_exec_time,
+            'p99_inter_token_latency': p99_inter_token_latency,
+            'num_replicas': num_replicas,
+            'tensor_parallel_size': tensor_parallel_size,
+            'num_pipeline_stages': num_pipeline_stages,
+            'device': device,
+            'network_device': network_device,
+            'model_name': model_name,
+            'scheduler_type': scheduler_type,
+            'chunk_size': chunk_size,
+            'batch_size': sarathi_batch_size,
+            'prefill_tokens': prefill_tokens,
+            'decode_tokens': decode_tokens,
+            'config_path': config_path,
+            'metrics_path': metrics_path
+        })
+
+# Convert results to DataFrame
+df = pd.DataFrame(results)
+
+if len(df) == 0:
+    print("No data found!")
+else:
+    # Save the raw data
+    df.to_csv("config_optimizer_results.csv", index=False)
+    
+    # Display top 5 results sorted by p99_ttft
+    print("Top 5 configs by lowest P99 TTFT:")
+    top_configs = df.sort_values('p99_ttft').head(5)
+    print(top_configs)
+    
+    # Create a unique color map for the different configurations
+    unique_configs = {}
+    
+    # Use network_device for coloring
+    unique_network_device = df['network_device'].unique()
+    
+    for i, val in enumerate(unique_network_device):
+        unique_configs[val] = i
+    
+    # Create custom colormap
+    colors = plt.cm.viridis(np.linspace(0, 1, max(len(unique_configs), 1)))
+    
+    # Calculate QPS per dollar using the actual device costs and proper device count
+    # Get cost per hour and GPUs per node for each device
+    df['device_cost_per_hour'] = df['device'].apply(lambda x: device_costs.get(x, {}).get('cost', 0))
+    df['gpus_per_node'] = df['device'].apply(lambda x: device_costs.get(x, {}).get('gpus_per_node', 8))
+    
+    # Calculate how many replicas can fit on one node based on device GPU count
+    df['replica_per_node'] = df.apply(
+        lambda x: x['gpus_per_node'] / (x['tensor_parallel_size'] * x['num_pipeline_stages']), 
+        axis=1
+    )
+    
+    # Calculate number of nodes needed (ceiling of num_replicas / replica_per_node)
+    df['nodes_needed'] = df.apply(
+        lambda x: np.ceil(x['num_replicas'] / x['replica_per_node']) if x['replica_per_node'] > 0 else x['num_replicas'], 
+        axis=1
+    )
+    
+    # Calculate total cost per hour based on actual device count
+    df['total_cost_per_hour'] = df['device_cost_per_hour'] * df['nodes_needed']
+    
+    # Calculate QPS per dollar
+    df['qps_per_dollar'] = df.apply(
+        lambda x: x['qps'] / x['total_cost_per_hour'] if x['total_cost_per_hour'] > 0 else 0, 
+        axis=1
+    )
+    
+    # Calculate best configs for different metrics
+    slo_compliant = df[(df['p99_ttft'] <= slo_limit) & (df['p99_exec_time'] <= exec_slo)]
+    
+    # Best config for QPS (max QPS under SLO)
+    if len(slo_compliant) > 0:
+        best_config_qps = slo_compliant.loc[slo_compliant['qps'].idxmax()]
+    else:
+        print("Warning: no config under SLO configured for QPS, falling back to min p99_ttft...")
+        best_config_qps = df.sort_values('p99_ttft').iloc[0]
+    
+    # Best config for QPS per dollar (max QPS per dollar under SLO)
+    if len(slo_compliant) > 0:
+        best_config_qps_per_dollar = slo_compliant.loc[slo_compliant['qps_per_dollar'].idxmax()]
+    else:
+        print("Warning: no config under SLO configured for QPS per dollar, falling back to min p99_ttft...")
+        best_config_qps_per_dollar = df.sort_values('p99_ttft').iloc[0]
+    
+    # For the third subplot, use the QPS best config
+    best_config_third_plot = best_config_qps
+    
+    # Check if we have execution time data
+    has_exec_time = all(pd.notna(df['p99_exec_time']))
+    
+    # Create the best config descriptions
+    best_desc_qps = (f"Best QPS Config: PP={best_config_qps['num_pipeline_stages']}, "
+                    f"TP={best_config_qps['tensor_parallel_size']}, "
+                    f"Replicas={best_config_qps['num_replicas']}, "
+                    f"Scheduler={best_config_qps['scheduler_type']}, "
+                    f"Chunk={best_config_qps['chunk_size']}, "
+                    f"Batch={best_config_qps['batch_size']}, "
+                    f"SKU={best_config_qps['device']}, "
+                    f"QPS = {best_config_qps['qps']:.2f}")
+    
+    best_desc_qps_per_dollar = (f"Best QPS/$ Config: PP={best_config_qps_per_dollar['num_pipeline_stages']}, "
+                               f"TP={best_config_qps_per_dollar['tensor_parallel_size']}, "
+                               f"Replicas={best_config_qps_per_dollar['num_replicas']}, "
+                               f"Scheduler={best_config_qps_per_dollar['scheduler_type']}, "
+                               f"Chunk={best_config_qps_per_dollar['chunk_size']}, "
+                               f"Batch={best_config_qps_per_dollar['batch_size']}, "
+                               f"SKU={best_config_qps_per_dollar['device']}, "
+                               f"QPS/$ = {best_config_qps_per_dollar['qps_per_dollar']:.4f}")
+
+    # =========================================
+    # Figure 1: QPS Scatter Plot (4 subplots - including p99_inter_token_latency)
+    # =========================================
+    fig1, axes1 = plt.subplots(1, 4, figsize=(32, 8))
+    fig1.suptitle("LLM Performance: QPS Analysis", fontsize=16)
+    fig1.text(0.5, 0.97, best_desc_qps, ha='center', fontsize=12)
+
+    # Subplot 1: QPS vs P99 TTFT
+    ax = axes1[0]
+    ax.set_title("QPS vs P99 Time to First Token", fontsize=14)
+    
+    for network_device in unique_network_device:
+        subset = df[df['network_device'] == network_device]
+        ax.scatter(subset['p99_ttft'], subset['qps'], 
+                   label=network_device,
+                   color=colors[unique_configs[network_device]],
+                   s=80, alpha=0.7)
+    
+    # No star for first subplot
+    
+    # Add SLO limit line
+    ax.axvline(x=slo_limit, color='red', linestyle='--', label='SLO Limit (200ms)')
+    ax.axvspan(0, slo_limit, alpha=0.1, color='green', label='SLO Compliant Region')
+    
+    ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
+    ax.set_ylabel("QPS", fontsize=12)
+    ax.grid(True, alpha=0.3)
+    ax.legend(title="Configuration", fontsize=8)
+    
+    # Subplot 2: QPS vs P99 Request Total Latency
+    ax = axes1[1]
+    ax.set_title("QPS vs P99 Request Total Latency", fontsize=14)
+    
+    if has_exec_time:
+        for network_device in unique_network_device:
+            subset = df[df['network_device'] == network_device]
+            ax.scatter(subset['p99_exec_time'], subset['qps'], 
+                      label=network_device,
+                      color=colors[unique_configs[network_device]],
+                      s=80, alpha=0.7)
+        
+        # No star for second subplot
+        
+        # Add SLO limit line
+        ax.axvline(x=exec_slo, color='red', linestyle='--', label=f'SLO Limit ({exec_slo}s)')
+        ax.axvspan(0, exec_slo, alpha=0.1, color='green', label='SLO Compliant Region')
+        
+        ax.set_xlabel("Request Execution Time - P99 (s)", fontsize=12)
+        ax.set_ylabel("QPS", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Configuration", fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "P99 Request Total Latency metrics not available", 
+                ha='center', va='center', fontsize=14)
+    
+    # Subplot 3: QPS vs P99 Inter-Token Latency
+    ax = axes1[2]
+    ax.set_title("QPS vs P99 Inter-Token Latency", fontsize=14)
+    
+    # Check if we have inter-token latency data
+    has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
+    
+    if has_inter_token_latency:
+        for network_device in unique_network_device:
+            subset = df[df['network_device'] == network_device]
+            ax.scatter(subset['p99_inter_token_latency'], subset['qps'], 
+                     label=network_device,
+                     color=colors[unique_configs[network_device]],
+                     s=80, alpha=0.7)
+        
+        # No star for third subplot
+        
+        # Add SLO limit line for inter-token latency (8ms)
+        ax.axvline(x=inter_token_slo, color='red', linestyle='--', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
+        ax.axvspan(0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
+        
+        ax.set_xlabel("Inter-Token Latency - P99 (s)", fontsize=12)
+        ax.set_ylabel("QPS", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Configuration", fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
+               ha='center', va='center', fontsize=14)
+    
+    # Subplot 4: P99 Inter-Token Latency vs P99 TTFT, colored by device
+    ax = axes1[3]
+    ax.set_title("P99 Inter-Token Latency vs P99 TTFT (Colored by Device)", fontsize=14)
+    
+    # Check if we have inter-token latency data
+    has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
+    
+    if has_inter_token_latency:
+        for network_device in unique_network_device:
+            subset = df[df['network_device'] == network_device]
+            ax.scatter(subset['p99_ttft'], subset['p99_inter_token_latency'], 
+                      label=network_device,
+                      color=colors[unique_configs[network_device]],
+                      s=100, alpha=0.7)
+        
+        # Highlight the best config (only on fourth subplot)
+        ax.scatter(best_config_third_plot['p99_ttft'], best_config_third_plot['p99_inter_token_latency'], 
+                  color='gold', s=200, marker='*', 
+                  label=f"Best: {best_config_third_plot['device']} TP{best_config_third_plot['tensor_parallel_size']}/PP{best_config_third_plot['num_pipeline_stages']}", 
+                  edgecolor='black', zorder=10)
+        
+        # Add SLO limit lines
+
+        ax.axvline(x=slo_limit, color='red', linestyle='--', label=f'TTFT SLO ({slo_limit*1000}ms)')
+        ax.axhline(y=inter_token_slo, color='red', linestyle=':', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
+        
+        # Add SLO compliant region (bottom-left rectangle)
+        ax.fill_between([0, slo_limit], 0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
+        
+        ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
+        ax.set_ylabel("Inter-Token Latency - P99 (s)", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
+                ha='center', va='center', fontsize=14)
+    
+    # Adjust layout and save
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig("qps_scatter.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # =================================================
+    # Figure 2: QPS per Dollar Scatter Plot (4 subplots - including p99_inter_token_latency)
+    # =================================================
+    fig2, axes2 = plt.subplots(1, 4, figsize=(32, 8))
+    #fig2.suptitle("LLM Cost Efficiency: QPS per Dollar Analysis", fontsize=16)
+    fig2.text(0.5, 0.97, best_desc_qps_per_dollar, ha='center', fontsize=12)
+    
+    # Subplot 1: QPS per Dollar vs P99 TTFT
+    ax = axes2[0]
+    ax.set_title("QPS per Dollar vs P99 TTFT", fontsize=14)
+    
+    for network_device in unique_network_device:
+        subset = df[df['network_device'] == network_device]
+        ax.scatter(subset['p99_ttft'], subset['qps_per_dollar'], 
+                   label=network_device,
+                   color=colors[unique_configs[network_device]],
+                   s=80, alpha=0.7)
+    
+    # No star for first subplot
+    
+    # Add SLO limit line
+    ax.axvline(x=slo_limit, color='red', linestyle='--', label=f'SLO Limit ({slo_limit*1000}ms)')
+    ax.axvspan(0, slo_limit, alpha=0.1, color='green', label='SLO Compliant Region')
+    
+    ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
+    ax.set_ylabel("QPS per Dollar", fontsize=12)
+    ax.grid(True, alpha=0.3)
+    ax.legend(title="Configuration", fontsize=8)
+    
+    # Subplot 2: QPS per Dollar vs P99 Request Total Latency
+    ax = axes2[1]
+    ax.set_title("QPS per Dollar vs P99 Request Latency", fontsize=14)
+    
+    if has_exec_time:
+        for network_device in unique_network_device:
+            subset = df[df['network_device'] == network_device]
+            ax.scatter(subset['p99_exec_time'], subset['qps_per_dollar'], 
+                      label=network_device,
+                      color=colors[unique_configs[network_device]],
+                      s=80, alpha=0.7)
+        
+        # No star for second subplot
+        
+        # Add SLO limit line
+        ax.axvline(x=exec_slo, color='red', linestyle='--', label='SLO Limit (5s)')
+        ax.axvspan(0, exec_slo, alpha=0.1, color='green', label='SLO Compliant Region')
+        
+        ax.set_xlabel("Request Execution Time - P99 (s)", fontsize=12)
+        ax.set_ylabel("QPS per Dollar", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Configuration", fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "P99 Request Total Latency metrics not available", 
+                ha='center', va='center', fontsize=14)
+    
+    # Subplot 3: QPS per Dollar vs P99 Inter-Token Latency
+    ax = axes2[2]
+    ax.set_title("QPS per Dollar vs P99 Inter-Token Latency", fontsize=14)
+    
+    # Check if we have inter-token latency data
+    has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
+    
+    if has_inter_token_latency:
+        for network_device in unique_network_device:
+            subset = df[df['network_device'] == network_device]
+            ax.scatter(subset['p99_inter_token_latency'], subset['qps_per_dollar'], 
+                     label=network_device,
+                     color=colors[unique_configs[network_device]],
+                     s=80, alpha=0.7)
+        
+        # No star for third subplot
+        
+        # Add a reasonable SLO limit line for inter-token latency (e.g., 20ms)
+        ax.axvline(x=inter_token_slo, color='red', linestyle='--', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
+        ax.axvspan(0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
+        
+        ax.set_xlabel("Inter-Token Latency - P99 (s)", fontsize=12)
+        ax.set_ylabel("QPS per Dollar", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(title="Configuration", fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
+               ha='center', va='center', fontsize=14)
+    
+    # Subplot 4: P99 Inter-Token Latency vs P99 TTFT, colored by device
+    ax = axes2[3]
+    ax.set_title("P99 Inter-Token Latency vs P99 TTFT (Colored by Device)", fontsize=14)
+    
+    # Check if we have inter-token latency data
+    has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
+    
+    if has_inter_token_latency:
+        for network_device in unique_network_device:
+            subset = df[df['network_device'] == network_device]
+            ax.scatter(subset['p99_ttft'], subset['p99_inter_token_latency'], 
+                      label=network_device,
+                      color=colors[unique_configs[network_device]],
+                      s=100, alpha=0.7)
+        
+        # Highlight the best config (only on fourth subplot)
+        ax.scatter(best_config_third_plot['p99_ttft'], best_config_third_plot['p99_inter_token_latency'], 
+                  color='gold', s=200, marker='*', 
+                  label=f"Best: {best_config_third_plot['device']} TP{best_config_third_plot['tensor_parallel_size']}/PP{best_config_third_plot['num_pipeline_stages']}", 
+                  edgecolor='black', zorder=10)
+        
+        # Add SLO limit lines
+        ax.axvline(x=slo_limit, color='red', linestyle='--', label=f'TTFT SLO ({slo_limit*1000}ms)')
+        ax.axhline(y=inter_token_slo, color='red', linestyle=':', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
+        
+        # Add SLO compliant region (bottom-left rectangle)
+        ax.fill_between([0, slo_limit], 0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
+
+        
+        ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
+        ax.set_ylabel("Inter-Token Latency - P99 (s)", fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
+                ha='center', va='center', fontsize=14)
+    
+    # Adjust layout and save
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig("qps_per_dollar_scatter.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print("Analysis complete.")
+    print(f"Raw data saved: config_optimizer_results.csv")
+    print(f"Plots saved:")
+    print(f"  - qps_scatter.png - QPS performance metrics")
+    print(f"  - qps_per_dollar_scatter.png - Cost efficiency metrics")
