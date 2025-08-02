@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import glob
 import csv
 
@@ -233,7 +234,7 @@ if len(df) == 0:
     print("No data found!")
 else:
     # Save the raw data
-    df.to_csv("config_optimizer_results.csv", index=False)
+    
     
     # Display top 5 results sorted by p99_ttft
     print("Top 5 configs by lowest P99 TTFT:")
@@ -258,18 +259,24 @@ else:
     df['gpus_per_node'] = df['device'].apply(lambda x: device_costs.get(x, {}).get('gpus_per_node', 8))
     
     # Calculate how many replicas can fit on one node based on device GPU count
+    # Add comments to explain the data flow
+    # These columns are calculated on-the-fly and not persisted in the DataFrame
+    # To save them, we need to store them before saving to CSV
+    
+    # Calculate replicas that can fit on one node
     df['replica_per_node'] = df.apply(
         lambda x: x['gpus_per_node'] / (x['tensor_parallel_size'] * x['num_pipeline_stages']), 
         axis=1
     )
+    assert all(df['replica_per_node'] > 0), "Replica per node must be greater than 0"    
     
-    # Calculate number of nodes needed (ceiling of num_replicas / replica_per_node)
+    # Calculate number of nodes needed
     df['nodes_needed'] = df.apply(
-        lambda x: np.ceil(x['num_replicas'] / x['replica_per_node']) if x['replica_per_node'] > 0 else x['num_replicas'], 
+        lambda x: np.ceil(x['num_replicas'] / x['replica_per_node']),
         axis=1
     )
     
-    # Calculate total cost per hour based on actual device count
+    # Calculate total cost per hour
     df['total_cost_per_hour'] = df['device_cost_per_hour'] * df['nodes_needed']
     
     # Calculate QPS per dollar
@@ -278,6 +285,8 @@ else:
         axis=1
     )
     
+    # Save all columns including the calculated ones
+    df.to_csv("config_optimizer_results.csv", index=False)
     # Calculate best configs for different metrics
     slo_compliant = df[(df['p99_ttft'] <= slo_limit) & (df['p99_exec_time'] <= exec_slo)]
     
@@ -305,15 +314,17 @@ else:
     best_desc_qps = (f"Best QPS Config: PP={best_config_qps['num_pipeline_stages']}, "
                     f"TP={best_config_qps['tensor_parallel_size']}, "
                     f"Replicas={best_config_qps['num_replicas']}, "
+                    f"Nodes={best_config_qps['nodes_needed']}, "
                     f"Scheduler={best_config_qps['scheduler_type']}, "
                     f"Chunk={best_config_qps['chunk_size']}, "
                     f"Batch={best_config_qps['batch_size']}, "
                     f"SKU={best_config_qps['device']}, "
                     f"QPS = {best_config_qps['qps']:.2f}")
     
-    best_desc_qps_per_dollar = (f"Best QPS/$ Config: PP={best_config_qps_per_dollar['num_pipeline_stages']}, "
+    best_desc_qps_per_dollar = (f"Best QPS/Dollar Config: PP={best_config_qps_per_dollar['num_pipeline_stages']}, "
                                f"TP={best_config_qps_per_dollar['tensor_parallel_size']}, "
                                f"Replicas={best_config_qps_per_dollar['num_replicas']}, "
+                               f"Nodes={best_config_qps_per_dollar['nodes_needed']}, "
                                f"Scheduler={best_config_qps_per_dollar['scheduler_type']}, "
                                f"Chunk={best_config_qps_per_dollar['chunk_size']}, "
                                f"Batch={best_config_qps_per_dollar['batch_size']}, "
@@ -323,13 +334,13 @@ else:
     # =========================================
     # Figure 1: QPS Scatter Plot (4 subplots - including p99_inter_token_latency)
     # =========================================
-    fig1, axes1 = plt.subplots(1, 4, figsize=(32, 8))
-    fig1.suptitle("LLM Performance: QPS Analysis", fontsize=16)
-    fig1.text(0.5, 0.97, best_desc_qps, ha='center', fontsize=12)
+    fig1, axes1 = plt.subplots(2, 2, figsize=(18, 16), gridspec_kw={'width_ratios': [1, 1.2], 'height_ratios': [1, 1]})
+    #fig1.suptitle("LLM Performance: QPS Analysis", fontsize=21)
+    fig1.text(0.5, 0.97, best_desc_qps, ha='center', fontsize=17)
 
     # Subplot 1: QPS vs P99 TTFT
-    ax = axes1[0]
-    ax.set_title("QPS vs P99 Time to First Token", fontsize=14)
+    ax = axes1[0, 0]
+    ax.set_title("QPS vs P99 Time to First Token", fontsize=19)
     
     for network_device in unique_network_device:
         subset = df[df['network_device'] == network_device]
@@ -344,14 +355,14 @@ else:
     ax.axvline(x=slo_limit, color='red', linestyle='--', label='SLO Limit (200ms)')
     ax.axvspan(0, slo_limit, alpha=0.1, color='green', label='SLO Compliant Region')
     
-    ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
-    ax.set_ylabel("QPS", fontsize=12)
+    ax.set_xlabel("Time to First Token - P99 (s)", fontsize=17)
+    ax.set_ylabel("QPS", fontsize=17)
     ax.grid(True, alpha=0.3)
-    ax.legend(title="Configuration", fontsize=8)
+    ax.legend(title="Configuration", fontsize=13)
     
     # Subplot 2: QPS vs P99 Request Total Latency
-    ax = axes1[1]
-    ax.set_title("QPS vs P99 Request Total Latency", fontsize=14)
+    ax = axes1[0, 1]
+    ax.set_title("QPS vs P99 Request Total Latency", fontsize=19)
     
     if has_exec_time:
         for network_device in unique_network_device:
@@ -367,17 +378,17 @@ else:
         ax.axvline(x=exec_slo, color='red', linestyle='--', label=f'SLO Limit ({exec_slo}s)')
         ax.axvspan(0, exec_slo, alpha=0.1, color='green', label='SLO Compliant Region')
         
-        ax.set_xlabel("Request Execution Time - P99 (s)", fontsize=12)
-        ax.set_ylabel("QPS", fontsize=12)
+        ax.set_xlabel("Request Execution Time - P99 (s)", fontsize=17)
+        ax.set_ylabel("QPS", fontsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(title="Configuration", fontsize=8)
+        ax.legend(title="Configuration", fontsize=13)
     else:
         ax.text(0.5, 0.5, "P99 Request Total Latency metrics not available", 
-                ha='center', va='center', fontsize=14)
+                ha='center', va='center', fontsize=19)
     
     # Subplot 3: QPS vs P99 Inter-Token Latency
-    ax = axes1[2]
-    ax.set_title("QPS vs P99 Inter-Token Latency", fontsize=14)
+    ax = axes1[1, 0]
+    ax.set_title("QPS vs P99 Inter-Token Latency", fontsize=19)
     
     # Check if we have inter-token latency data
     has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
@@ -396,28 +407,31 @@ else:
         ax.axvline(x=inter_token_slo, color='red', linestyle='--', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
         ax.axvspan(0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
         
-        ax.set_xlabel("Inter-Token Latency - P99 (s)", fontsize=12)
-        ax.set_ylabel("QPS", fontsize=12)
+        ax.set_xlabel("Inter-Token Latency - P99 (s)", fontsize=17)
+        ax.set_ylabel("QPS", fontsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(title="Configuration", fontsize=8)
+        ax.legend(title="Configuration", fontsize=13)
     else:
         ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
-               ha='center', va='center', fontsize=14)
+               ha='center', va='center', fontsize=19)
     
-    # Subplot 4: P99 Inter-Token Latency vs P99 TTFT, colored by device
-    ax = axes1[3]
-    ax.set_title("P99 Inter-Token Latency vs P99 TTFT (Colored by Device)", fontsize=14)
+    # Subplot 4: P99 Inter-Token Latency vs P99 TTFT, colored by QPS
+    ax = axes1[1, 1]
+    ax.set_title("P99 Inter-Token Latency vs P99 TTFT (Colored by QPS)", fontsize=19)
     
     # Check if we have inter-token latency data
     has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
     
     if has_inter_token_latency:
-        for network_device in unique_network_device:
-            subset = df[df['network_device'] == network_device]
-            ax.scatter(subset['p99_ttft'], subset['p99_inter_token_latency'], 
-                      label=network_device,
-                      color=colors[unique_configs[network_device]],
-                      s=100, alpha=0.7)
+        # Create scatter plot with QPS as color
+        scatter = ax.scatter(df['p99_ttft'], df['p99_inter_token_latency'], 
+                           c=df['qps'], cmap='viridis', s=100, alpha=0.7)
+        
+        # Add colorbar with proper spacing
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cbar = plt.colorbar(scatter, cax=cax)
+        cbar.set_label('QPS', fontsize=17)
         
         # Highlight the best config (only on fourth subplot)
         ax.scatter(best_config_third_plot['p99_ttft'], best_config_third_plot['p99_inter_token_latency'], 
@@ -426,20 +440,19 @@ else:
                   edgecolor='black', zorder=10)
         
         # Add SLO limit lines
-
         ax.axvline(x=slo_limit, color='red', linestyle='--', label=f'TTFT SLO ({slo_limit*1000}ms)')
         ax.axhline(y=inter_token_slo, color='red', linestyle=':', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
         
         # Add SLO compliant region (bottom-left rectangle)
         ax.fill_between([0, slo_limit], 0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
         
-        ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
-        ax.set_ylabel("Inter-Token Latency - P99 (s)", fontsize=12)
+        ax.set_xlabel("Time to First Token - P99 (s)", fontsize=17)
+        ax.set_ylabel("Inter-Token Latency - P99 (s)", fontsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=13)
     else:
         ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
-                ha='center', va='center', fontsize=14)
+                ha='center', va='center', fontsize=19)
     
     # Adjust layout and save
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -449,13 +462,13 @@ else:
     # =================================================
     # Figure 2: QPS per Dollar Scatter Plot (4 subplots - including p99_inter_token_latency)
     # =================================================
-    fig2, axes2 = plt.subplots(1, 4, figsize=(32, 8))
-    #fig2.suptitle("LLM Cost Efficiency: QPS per Dollar Analysis", fontsize=16)
-    fig2.text(0.5, 0.97, best_desc_qps_per_dollar, ha='center', fontsize=12)
+    fig2, axes2 = plt.subplots(2, 2, figsize=(18, 16), gridspec_kw={'width_ratios': [1, 1.2], 'height_ratios': [1, 1]})
+    #fig2.suptitle("LLM Cost Efficiency: QPS per Dollar Analysis", fontsize=21)
+    fig2.text(0.5, 0.97, best_desc_qps_per_dollar, ha='center', fontsize=17)
     
     # Subplot 1: QPS per Dollar vs P99 TTFT
-    ax = axes2[0]
-    ax.set_title("QPS per Dollar vs P99 TTFT", fontsize=14)
+    ax = axes2[0, 0]
+    ax.set_title("QPS per Dollar vs P99 TTFT", fontsize=19)
     
     for network_device in unique_network_device:
         subset = df[df['network_device'] == network_device]
@@ -470,14 +483,14 @@ else:
     ax.axvline(x=slo_limit, color='red', linestyle='--', label=f'SLO Limit ({slo_limit*1000}ms)')
     ax.axvspan(0, slo_limit, alpha=0.1, color='green', label='SLO Compliant Region')
     
-    ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
-    ax.set_ylabel("QPS per Dollar", fontsize=12)
+    ax.set_xlabel("Time to First Token - P99 (s)", fontsize=17)
+    ax.set_ylabel("QPS per Dollar", fontsize=17)
     ax.grid(True, alpha=0.3)
-    ax.legend(title="Configuration", fontsize=8)
+    ax.legend(title="Configuration", fontsize=13)
     
     # Subplot 2: QPS per Dollar vs P99 Request Total Latency
-    ax = axes2[1]
-    ax.set_title("QPS per Dollar vs P99 Request Latency", fontsize=14)
+    ax = axes2[0, 1]
+    ax.set_title("QPS per Dollar vs P99 Request Latency", fontsize=19)
     
     if has_exec_time:
         for network_device in unique_network_device:
@@ -493,17 +506,17 @@ else:
         ax.axvline(x=exec_slo, color='red', linestyle='--', label='SLO Limit (5s)')
         ax.axvspan(0, exec_slo, alpha=0.1, color='green', label='SLO Compliant Region')
         
-        ax.set_xlabel("Request Execution Time - P99 (s)", fontsize=12)
-        ax.set_ylabel("QPS per Dollar", fontsize=12)
+        ax.set_xlabel("Request Execution Time - P99 (s)", fontsize=17)
+        ax.set_ylabel("QPS per Dollar", fontsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(title="Configuration", fontsize=8)
+        ax.legend(title="Configuration", fontsize=13)
     else:
         ax.text(0.5, 0.5, "P99 Request Total Latency metrics not available", 
-                ha='center', va='center', fontsize=14)
+                ha='center', va='center', fontsize=19)
     
     # Subplot 3: QPS per Dollar vs P99 Inter-Token Latency
-    ax = axes2[2]
-    ax.set_title("QPS per Dollar vs P99 Inter-Token Latency", fontsize=14)
+    ax = axes2[1, 0]
+    ax.set_title("QPS per Dollar vs P99 Inter-Token Latency", fontsize=19)
     
     # Check if we have inter-token latency data
     has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
@@ -522,32 +535,35 @@ else:
         ax.axvline(x=inter_token_slo, color='red', linestyle='--', label=f'Inter-Token SLO ({inter_token_slo*1000}ms)')
         ax.axvspan(0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
         
-        ax.set_xlabel("Inter-Token Latency - P99 (s)", fontsize=12)
-        ax.set_ylabel("QPS per Dollar", fontsize=12)
+        ax.set_xlabel("Inter-Token Latency - P99 (s)", fontsize=17)
+        ax.set_ylabel("QPS per Dollar", fontsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(title="Configuration", fontsize=8)
+        ax.legend(title="Configuration", fontsize=13)
     else:
         ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
-               ha='center', va='center', fontsize=14)
+               ha='center', va='center', fontsize=19)
     
-    # Subplot 4: P99 Inter-Token Latency vs P99 TTFT, colored by device
-    ax = axes2[3]
-    ax.set_title("P99 Inter-Token Latency vs P99 TTFT (Colored by Device)", fontsize=14)
+    # Subplot 4: P99 Inter-Token Latency vs P99 TTFT, colored by QPS per Dollar
+    ax = axes2[1, 1]
+    ax.set_title("P99 Inter-Token Latency vs P99 TTFT (Colored by QPS/$)", fontsize=19)
     
     # Check if we have inter-token latency data
     has_inter_token_latency = pd.notna(df['p99_inter_token_latency']).any()
     
     if has_inter_token_latency:
-        for network_device in unique_network_device:
-            subset = df[df['network_device'] == network_device]
-            ax.scatter(subset['p99_ttft'], subset['p99_inter_token_latency'], 
-                      label=network_device,
-                      color=colors[unique_configs[network_device]],
-                      s=100, alpha=0.7)
+        # Create scatter plot with QPS per dollar as color
+        scatter = ax.scatter(df['p99_ttft'], df['p99_inter_token_latency'], 
+                           c=df['qps_per_dollar'], cmap='viridis', s=100, alpha=0.7)
+        
+        # Add colorbar with proper spacing
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cbar = plt.colorbar(scatter, cax=cax)
+        cbar.set_label('QPS per Dollar', fontsize=17)
         
         # Highlight the best config (only on fourth subplot)
         ax.scatter(best_config_third_plot['p99_ttft'], best_config_third_plot['p99_inter_token_latency'], 
-                  color='gold', s=200, marker='*', 
+                  color='gold', s=250, marker='*', 
                   label=f"Best: {best_config_third_plot['device']} TP{best_config_third_plot['tensor_parallel_size']}/PP{best_config_third_plot['num_pipeline_stages']}", 
                   edgecolor='black', zorder=10)
         
@@ -557,15 +573,14 @@ else:
         
         # Add SLO compliant region (bottom-left rectangle)
         ax.fill_between([0, slo_limit], 0, inter_token_slo, alpha=0.1, color='green', label='SLO Compliant Region')
-
         
-        ax.set_xlabel("Time to First Token - P99 (s)", fontsize=12)
-        ax.set_ylabel("Inter-Token Latency - P99 (s)", fontsize=12)
+        ax.set_xlabel("Time to First Token - P99 (s)", fontsize=17)
+        ax.set_ylabel("Inter-Token Latency - P99 (s)", fontsize=17)
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=13)
     else:
         ax.text(0.5, 0.5, "P99 Inter-Token Latency metrics not available", 
-                ha='center', va='center', fontsize=14)
+                ha='center', va='center', fontsize=19)
     
     # Adjust layout and save
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
