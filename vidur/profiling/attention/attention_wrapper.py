@@ -1,16 +1,20 @@
+import types
 from math import ceil
 from typing import List
 
 import numpy as np
-import torch
-import types
 import sarathi.metrics.cuda_timer
+import torch
+
 from vidur.profiling.common.cuda_timer import CudaTimer
 
 # Monkey patch Sarathi to use Vidur's CudaTimer before importing attention code
 sarathi.metrics.cuda_timer.CudaTimer = CudaTimer
 
 from sarathi.config import ParallelConfig
+
+# Create a minimal MetricsStore implementation to avoid dependency issues
+from sarathi.metrics.metrics_store import MetricsStore
 from sarathi.model_executor.attention import (
     AttentionBackend,
     get_attention_wrapper,
@@ -19,12 +23,9 @@ from sarathi.model_executor.attention import (
 
 from vidur.profiling.attention.attention_input import AttentionInput
 from vidur.profiling.attention.sequence_proxy import SequenceMetadataProxy
+from vidur.profiling.common.cuda_timer import CudaTimer
 from vidur.profiling.common.model_config import ModelConfig
 from vidur.profiling.common.timer_stats_store import TimerStatsStore
-
-# Create a minimal MetricsStore implementation to avoid dependency issues
-from sarathi.metrics.metrics_store import MetricsStore
-from vidur.profiling.common.cuda_timer import CudaTimer
 
 # Create a dummy instance with minimal required methods
 MetricsStore._instance = types.SimpleNamespace()
@@ -148,6 +149,19 @@ class AttentionWrapper:
 
         get_attention_wrapper().end_forward()
 
+        dtype_size = torch.tensor([], dtype=self._dtype).element_size()
+        num_tokens_per_seq = (
+            attention_input.prefill_chunk_size if attention_input.is_prefill else 1
+        )
+        kv_cache_save_mem_bytes = (
+            attention_input.batch_size
+            * num_tokens_per_seq
+            * self._n_worker_kv_heads
+            * self._head_dim
+            * dtype_size
+            * 2
+        )
+
         return {
             "time_stats": self.time_stats_store.get_stats(),
             "n_embd": self._model_config.embedding_dim,
@@ -161,4 +175,5 @@ class AttentionWrapper:
             "kv_cache_size": attention_input.kv_cache_size,
             "is_prefill": attention_input.is_prefill,
             "attention_backend": self._attention_backend,
+            "attn_kv_cache_save_mem_bytes": kv_cache_save_mem_bytes,
         }

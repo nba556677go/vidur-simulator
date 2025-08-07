@@ -68,6 +68,13 @@ class SklearnExecutionTimePredictor(BaseExecutionTimePredictor):
 
         self._is_multi_node = num_workers > devices_per_node
 
+        self._kv_cache_token_bytes = (
+            2
+            * 2
+            * self._replica_config.attention_head_dim
+            * self._replica_config.kv_heads_per_tensor_parallel_worker
+        )
+
         (
             self._compute_input_file,
             self._attention_input_file,
@@ -279,6 +286,14 @@ class SklearnExecutionTimePredictor(BaseExecutionTimePredictor):
                 df_with_derived_features[column] = 0
             else:
                 df_with_derived_features.fillna({column: 0}, inplace=True)
+        if "attn_kv_cache_save_mem_bytes" not in df_with_derived_features.columns:
+            df_with_derived_features["attn_kv_cache_save_mem_bytes"] = (
+                df_with_derived_features["num_tokens"] * self._kv_cache_token_bytes
+            )
+        else:
+            df_with_derived_features.fillna(
+                {"attn_kv_cache_save_mem_bytes": 0}, inplace=True
+            )
         if "time_stats.attn_prefill.median" not in df_with_derived_features.columns:
             df_with_derived_features["time_stats.attn_prefill.median"] = (
                 df_with_derived_features["time_stats.attn.median"].where(
@@ -596,7 +611,7 @@ class SklearnExecutionTimePredictor(BaseExecutionTimePredictor):
             models[model_name] = self._train_model(
                 model_name=model_name,
                 df=attention_df,
-                feature_cols=["num_tokens"],
+                feature_cols=["num_tokens", "attn_kv_cache_save_mem_bytes"],
                 target_col=f"time_stats.{model_name}.median",
             )
 
@@ -704,10 +719,19 @@ class SklearnExecutionTimePredictor(BaseExecutionTimePredictor):
             model_names.append("all_reduce")
 
         num_token_range = np.arange(1, self._max_tokens + 1)
-        X = pd.DataFrame({"num_tokens": num_token_range})
 
         for model_name in model_names:
             model = models[model_name]
+            if model_name == "attn_kv_cache_save":
+                kv_cache_bytes = num_token_range * self._kv_cache_token_bytes
+                X = pd.DataFrame(
+                    {
+                        "num_tokens": num_token_range,
+                        "attn_kv_cache_save_mem_bytes": kv_cache_bytes,
+                    }
+                )
+            else:
+                X = pd.DataFrame({"num_tokens": num_token_range})
             predictions[model_name] = self._get_model_prediction(model_name, model, X)
 
         return predictions
@@ -889,7 +913,10 @@ class SklearnExecutionTimePredictor(BaseExecutionTimePredictor):
     ) -> float:
         # don't use round up to the nearest multiple of 8 here, because we want to
         # predict the execution time for the exact number of tokens
-        return self._predictions["attn_kv_cache_save"][(batch.total_num_tokens,)]
+        kv_cache_bytes = batch.total_num_tokens * self._kv_cache_token_bytes
+        return self._predictions["attn_kv_cache_save"][
+            (batch.total_num_tokens, kv_cache_bytes)
+        ]
 
     def _get_attention_decode_execution_time(
         self, batch: SklearnExecutionTimePredictorBatch
