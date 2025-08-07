@@ -44,13 +44,13 @@ class H100DeviceSKUConfig(BaseDeviceSKUConfig):
 
 
 @dataclass
-class L40SDeviceSKUConfig(BaseDeviceSKUConfig):
+class L40S_G6E48DeviceSKUConfig(BaseDeviceSKUConfig):
     fp16_tflops: int = 362
     total_memory_gb: int = 48
 
     @staticmethod
     def get_type():
-        return DeviceSKUType.L40S
+        return DeviceSKUType.L40S_G6E48
 
 
 @dataclass

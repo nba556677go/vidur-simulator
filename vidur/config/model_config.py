@@ -247,6 +247,22 @@ class Qwen2_5_3BModelConfig(QwenModelConfig):
 
 
 @dataclass
+class Qwen2_5_1_5BModelConfig(QwenModelConfig):
+    num_layers: int = 28
+    num_q_heads: int = 12
+    num_kv_heads: int = 2
+    embedding_dim: int = 1536
+    mlp_hidden_dim: int = 8960
+    max_model_len: int = 32768
+    vocab_size: int = 151936
+    rope_theta: Optional[float] = 1000000
+
+    @staticmethod
+    def get_name():
+        return "Qwen/Qwen2.5-1.5B"
+
+
+@dataclass
 class Qwen2_5_7BModelConfig(QwenModelConfig):
     num_layers: int = 28
     num_q_heads: int = 28

@@ -56,6 +56,20 @@ class VidurParser:
         metrics['exec_p90'] = df['request_execution_time'].quantile(0.9)
         metrics['exec_p99'] = df['request_execution_time'].quantile(0.99)
 
+        # Calculate TTFT metrics (prefill_e2e_time)
+        if 'prefill_e2e_time' in df.columns:
+            metrics['ttft_avg'] = df['prefill_e2e_time'].mean()
+            metrics['ttft_p50'] = df['prefill_e2e_time'].quantile(0.5)
+            metrics['ttft_p90'] = df['prefill_e2e_time'].quantile(0.9)
+            metrics['ttft_p99'] = df['prefill_e2e_time'].quantile(0.99)
+
+        # Calculate ITL metrics (decode_time_execution_plus_preemption_normalized)
+        if 'decode_time_execution_plus_preemption_normalized' in df.columns:
+            metrics['itl_avg'] = df['decode_time_execution_plus_preemption_normalized'].mean()
+            metrics['itl_p50'] = df['decode_time_execution_plus_preemption_normalized'].quantile(0.5)
+            metrics['itl_p90'] = df['decode_time_execution_plus_preemption_normalized'].quantile(0.9)
+            metrics['itl_p99'] = df['decode_time_execution_plus_preemption_normalized'].quantile(0.99)
+
         return metrics
 
     def process_directory(self, timestamp_dir: str) -> Tuple[Dict, ModelConfig]:
@@ -87,7 +101,7 @@ class VidurParser:
                 metrics, config = self.process_directory(timestamp_dir)
                 
                 if metrics and config:
-                    results_list.append({
+                    result_dict = {
                         'Timestamp': timestamp_dir,
                         'Model': config.model_name,
                         'Num_Replicas': config.num_replicas,
@@ -101,7 +115,27 @@ class VidurParser:
                         'Exec_P50': metrics['exec_p50'],
                         'Exec_P90': metrics['exec_p90'],
                         'Exec_P99': metrics['exec_p99']
-                    })
+                    }
+                    
+                    # Add TTFT metrics if available
+                    if 'ttft_avg' in metrics:
+                        result_dict.update({
+                            'TTFT_Avg': metrics['ttft_avg'],
+                            'TTFT_P50': metrics['ttft_p50'],
+                            'TTFT_P90': metrics['ttft_p90'],
+                            'TTFT_P99': metrics['ttft_p99']
+                        })
+                    
+                    # Add ITL metrics if available
+                    if 'itl_avg' in metrics:
+                        result_dict.update({
+                            'ITL_Avg': metrics['itl_avg'],
+                            'ITL_P50': metrics['itl_p50'],
+                            'ITL_P90': metrics['itl_p90'],
+                            'ITL_P99': metrics['itl_p99']
+                        })
+                    
+                    results_list.append(result_dict)
 
         return pd.DataFrame(results_list)
 
@@ -126,11 +160,12 @@ class VidurParser:
 def main():
     # Example usage
     #base_dir = "/home/ec2-user/s3-local/vidur_outputs/a100_default/qps0.25"
-    QPS=[8, 15, 20 , 25, 40]
-    profile_name = "h100_p5"
-    compute_profile = "h100_p5"
-    network_device = "h100_p5"
-    models = ["Qwen/Qwen2.5-7B"]
+    #QPS=[8, 15, 20 , 25, 40]
+    QPS=[29]
+    profile_name = "qu_brand"
+    compute_profile = "l40s_g6e48"
+    network_device = "l40s_g6e48"
+    models = ["Qwen/Qwen2.5-1.5B"]
     for qps in QPS:
         for model in models:
         

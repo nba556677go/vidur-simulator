@@ -68,9 +68,9 @@ def get_device_costs():
 CONFIG_DIR = "/home/ec2-user/vidur-simulator/config_optimizer_output_r8_r16/runs"
 base_dir = os.path.expanduser(CONFIG_DIR)
 # SLO limit example
-slo_limit = 0.2  # 200ms example for TTFT
+slo_limit = 0.25  # 200ms example for TTFT
 exec_slo = 7.8  # slo for total execution time
-inter_token_slo = 0.012  # 8ms in seconds
+inter_token_slo = 0.015  # 8ms in seconds
 # Data structure to hold results
 results = []
 
@@ -189,6 +189,16 @@ for run_dir in os.listdir(base_dir):
         # Read metrics
         metrics_df = pd.read_csv(metrics_path)
         
+        # Calculate total runtime: max(request_arrived_at + request_e2e_time)
+        if 'request_arrived_at' in metrics_df.columns and 'request_e2e_time' in metrics_df.columns:
+            total_runtime_seconds = (metrics_df['request_arrived_at'] + metrics_df['request_e2e_time']).max()
+        else:
+            # Fallback: use max request_e2e_time if columns are missing
+            total_runtime_seconds = metrics_df['request_e2e_time'].max() if 'request_e2e_time' in metrics_df.columns else 0
+        
+        # Convert to hours
+        total_runtime_hours = total_runtime_seconds / 3600.0
+        
         # Calculate P99 of prefill_e2e_time
         p99_ttft = metrics_df['prefill_e2e_time'].quantile(0.99)
         
@@ -223,6 +233,7 @@ for run_dir in os.listdir(base_dir):
             'batch_size': sarathi_batch_size,
             'prefill_tokens': prefill_tokens,
             'decode_tokens': decode_tokens,
+            'total_runtime_hours': total_runtime_hours,
             'config_path': config_path,
             'metrics_path': metrics_path
         })
@@ -279,9 +290,12 @@ else:
     # Calculate total cost per hour
     df['total_cost_per_hour'] = df['device_cost_per_hour'] * df['nodes_needed']
     
-    # Calculate QPS per dollar
+    # Calculate total cost for the entire run
+    df['total_cost'] = df['total_cost_per_hour'] * df['total_runtime_hours']
+    
+    # Calculate QPS per dollar using total cost
     df['qps_per_dollar'] = df.apply(
-        lambda x: x['qps'] / x['total_cost_per_hour'] if x['total_cost_per_hour'] > 0 else 0, 
+        lambda x: x['qps'] / x['total_cost'] if x['total_cost'] > 0 else 0, 
         axis=1
     )
     
@@ -329,6 +343,7 @@ else:
                                f"Chunk={best_config_qps_per_dollar['chunk_size']}, "
                                f"Batch={best_config_qps_per_dollar['batch_size']}, "
                                f"SKU={best_config_qps_per_dollar['device']}, "
+                               f"QPS = {best_config_qps['qps']:.2f}, "
                                f"QPS/$ = {best_config_qps_per_dollar['qps_per_dollar']:.4f}")
 
     # =========================================
