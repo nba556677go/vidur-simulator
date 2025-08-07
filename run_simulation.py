@@ -98,7 +98,8 @@ base_command = (
     "--replica_scheduler_config_type vllm_v1 "
     "--vllm_v1_scheduler_config_chunk_size 8192 "
     "--vllm_v1_scheduler_config_batch_size_cap 512 "
-    f"--metrics_config_output_dir {BASE_LOG_DIR}"
+    f"--metrics_config_output_dir {BASE_LOG_DIR} "
+    "--execution_time_predictor_config_cache_mode ignore_cache "
     #"--cache_config_enable_prefix_caching"
 )
 
