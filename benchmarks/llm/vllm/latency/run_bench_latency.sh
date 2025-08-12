@@ -23,27 +23,34 @@ set -u
 set -o pipefail
 
 # --- Benchmark Parameters ---
-NUM_PROMPTS=150
+NUM_PROMPTS=2000
+#output token size
+MAX_TOKENS=3 
 # Fixed parameters for every benchmark run
-MODEL_NAME="meta-llama/Meta-Llama-3-8B"
-PROMPTS_FILE="../../prompts/prompt_extend_2048_numprompts150.txt"
+#MODEL_NAME="meta-llama/Meta-Llama-3-8B"
+MODEL_NAME="Qwen/Qwen2.5-1.5B"
+#PROMPTS_FILE="../../prompts/prompt_extend_2048_numprompts150.txt"
+PROMPTS_FILE="../../prompts/prompt_extend_152_numprompts2000.txt"
+
+#qu promptfile
+QU_PROMPTS_FILE="/home/ec2-user/s3-local/qu/prompts/validation_results.csv"
 CONCURRENCY=30
 TOTAL_GPUS=8
 #OUTPUT_DIR="./sweep_configs/a100_40g"
-#OUTPUT_DIR="./test"
+OUTPUT_ROOT_DIR="qutest"
 # Base command for the Python benchmark script
 #QPS=0 - use prompy mode
 #QPS_VALUES=(0.25 0.5 2 8)
-QPS_VALUES=(15 20 40)
+QPS_VALUES=(29)
 
 for qps in "${QPS_VALUES[@]}"; do
-    OUTPUT_DIR="./vllm_output/h100_p5/numprompts150/qps$qps"
+    OUTPUT_DIR="./vllm_output/$OUTPUT_ROOT_DIR/numprompts$NUM_PROMPTS/qps$qps"
 
     if [ -n "${qps:-}" ]; then
         BASE_CMD="python3 bench_latency.py \
           --model $MODEL_NAME \
           --qps-mode \
-          --qps-prompts-file $PROMPTS_FILE \
+          --qu-prompts-file $QU_PROMPTS_FILE \
           --qps $qps \
           --output-dir $OUTPUT_DIR"
     else
@@ -57,11 +64,11 @@ for qps in "${QPS_VALUES[@]}"; do
     # --- Iteration Values ---
 
     # Valid Tensor Parallelism (tp) sizes to test
-    TP_VALUES=(1 2 4 8)
-    #TP_VALUES=(1)
+    #TP_VALUES=(1 2 4 8)
+    TP_VALUES=(1)
     # Valid Data Parallelism (dp) sizes to test
-    DP_VALUES=(1 2 4 8)
-    #DP_VALUES=(1)
+    #DP_VALUES=(1 2 4 8)
+    DP_VALUES=(1)
 
     # Define a specific set of 4 values for max-num-batched-tokens to test.
     # This samples performance across the requested range of 4096 to 75360.
@@ -70,7 +77,7 @@ for qps in "${QPS_VALUES[@]}"; do
 
     #fix engine configs 
     MAX_NUM_SEQS=512 # concurrent
-    MAX_TOKENS=512 #output token size
+    
     # --- Main Loop ---
 
     echo "Starting vLLM benchmark sweep for QPS=$qps..."

@@ -527,6 +527,7 @@ async def main():
     # --- QPS Mode Arguments ---
     parser.add_argument("--qps", type=float, default=1.0, help="Target queries per second for QPS mode.")
     parser.add_argument("--qps-prompts-file", type=str, help="Path to prompts file for QPS mode (required when using --qps-mode).")
+    parser.add_argument("--qu-prompts-file", type=str, help="Path to CSV file with 'input' column for QPS mode queries.")
     parser.add_argument("--num-requests", type=int, help="Total number of requests to send in QPS mode (if not specified, uses all prompts from file).")
     parser.add_argument("--duration", type=float, help="Duration in seconds to run QPS mode (alternative to --num-requests).")
     
@@ -543,8 +544,10 @@ async def main():
     
     # --- Validate QPS Mode Arguments ---
     if args.qps_mode:
-        if not args.qps_prompts_file:
-            parser.error("--qps-prompts-file is required when using --qps-mode")
+        if not args.qps_prompts_file and not args.qu_prompts_file:
+            parser.error("Either --qps-prompts-file or --qu-prompts-file is required when using --qps-mode")
+        if args.qps_prompts_file and args.qu_prompts_file:
+            parser.error("Cannot specify both --qps-prompts-file and --qu-prompts-file")
         if args.num_requests and args.duration:
             parser.error("Cannot specify both --num-requests and --duration for QPS mode")
         if args.qps <= 0:
@@ -602,11 +605,22 @@ async def main():
         elif args.qps_mode:
             # --- QPS Mode ---
             try:
-                with open(args.qps_prompts_file, "r", encoding="utf-8") as f:
-                    prompts = [line.strip() for line in f if line.strip()]
-                logger.info(f"Read {len(prompts)} prompts from {args.qps_prompts_file} for QPS mode")
+                if args.qu_prompts_file:
+                    print(f"reading qu prompt from {args.qu_prompts_file}")
+                    df = pd.read_csv(args.qu_prompts_file)
+                    print(f"df={df}")
+                    prompts = df['input'].dropna().tolist()
+                    logger.info(f"Read {len(prompts)} prompts from {args.qu_prompts_file} CSV for QPS mode")
+                else:
+                    print("reading qps prompts...")
+                    with open(args.qps_prompts_file, "r", encoding="utf-8") as f:
+                        prompts = [line.strip() for line in f if line.strip()]
+                    logger.info(f"Read {len(prompts)} prompts from {args.qps_prompts_file} for QPS mode")
             except FileNotFoundError:
-                logger.error(f"Error: QPS prompts file not found at {args.qps_prompts_file}")
+                logger.error(f"Error: Prompts file not found, qu path = {args.qu_prompts_file}, qps prompt = {args.qps_prompts_file}")
+                return
+            except Exception as e:
+                logger.error(f"Error reading prompts: {e}")
                 return
             
             gen_params = {"temperature": args.temperature, "top_p": args.top_p, "max_tokens": args.max_tokens, "min_tokens": int(0.7*int(args.max_tokens))}
