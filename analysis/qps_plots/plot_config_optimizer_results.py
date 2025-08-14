@@ -14,6 +14,7 @@ def get_device_costs():
     """
     Parse the Plannable_Public EC2_US East.csv to get hourly costs for different device types
     and include GPUs per node information
+    mostly network_device cost
     """
     device_costs = {
         'p4d_a100_40g_nvlink': {'cost': None, 'gpus_per_node': 8},  # p4d.24xlarge has 8 A100 GPUs
