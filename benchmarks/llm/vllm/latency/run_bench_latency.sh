@@ -37,11 +37,13 @@ QU_PROMPTS_FILE="/home/ec2-user/s3-local/qu/prompts/validation_results.csv"
 CONCURRENCY=30
 TOTAL_GPUS=8
 #OUTPUT_DIR="./sweep_configs/a100_40g"
-OUTPUT_ROOT_DIR="qutest"
+OUTPUT_ROOT_DIR="qu_brand/l40s_g6e48"
 # Base command for the Python benchmark script
 #QPS=0 - use prompy mode
 #QPS_VALUES=(0.25 0.5 2 8)
-QPS_VALUES=(29)
+#QPS_VALUES=(2 4 8 15 16 25 29 30)
+#QPS_VALUES=(4 8 15 29)
+QPS_VALUES=(2 16 25 30)
 
 for qps in "${QPS_VALUES[@]}"; do
     OUTPUT_DIR="./vllm_output/$OUTPUT_ROOT_DIR/numprompts$NUM_PROMPTS/qps$qps"
@@ -64,11 +66,11 @@ for qps in "${QPS_VALUES[@]}"; do
     # --- Iteration Values ---
 
     # Valid Tensor Parallelism (tp) sizes to test
-    #TP_VALUES=(1 2 4 8)
-    TP_VALUES=(1)
+    TP_VALUES=(1 2 4 8)
+    #TP_VALUES=(1)
     # Valid Data Parallelism (dp) sizes to test
-    #DP_VALUES=(1 2 4 8)
-    DP_VALUES=(1)
+    DP_VALUES=(1 2 4 8)
+    #DP_VALUES=(1)
 
     # Define a specific set of 4 values for max-num-batched-tokens to test.
     # This samples performance across the requested range of 4096 to 75360.
