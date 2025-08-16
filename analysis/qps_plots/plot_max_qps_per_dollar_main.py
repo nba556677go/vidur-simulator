@@ -33,6 +33,15 @@ def parse_arguments():
     parser.add_argument('--output_dir', type=str, default='max_qps',
                        help='Output directory to save plots (default: max_qps)')
     
+    parser.add_argument('--slo_limit', type=float, default=0.25,
+                       help='SLO limit for TTFT in seconds (default: 0.25)')
+    
+    parser.add_argument('--exec_slo', type=float, default=7.8,
+                       help='SLO limit for total execution time in seconds (default: 7.8)')
+    
+    parser.add_argument('--inter_token_slo', type=float, default=0.030,
+                       help='SLO limit for inter-token latency in seconds (default: 0.015)')
+    
     return parser.parse_args()
 
 
@@ -57,7 +66,8 @@ def main():
     print(f"Output directory: {args.output_dir}")
     
     # Create plotter instance
-    plotter = ConfigOptimizerPlotter(args.csv_file, input_param, args.output_dir)
+    plotter = ConfigOptimizerPlotter(args.csv_file, input_param, args.output_dir, 
+                                   args.slo_limit, args.exec_slo, args.inter_token_slo)
     
     # Load and filter data
     plotter.load_and_filter_data()

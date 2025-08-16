@@ -1,0 +1,11 @@
+network_device,model_name,total_cost
+a10g_g5,meta-llama/Meta-Llama-3-8B,39.467195323849985
+h100_p5,meta-llama/Meta-Llama-3-8B,28.393426937361188
+l40s_g6e48,meta-llama/Meta-Llama-3-8B,14.2999443493499
+p4d_a100_40g_nvlink,meta-llama/Meta-Llama-3-8B,11.473459201027422
+l4_g6,meta-llama/Meta-Llama-3-8B,8.939612779678445
+h100_p5,Qwen/Qwen2.5-1.5B,6.9204069180763526
+p4d_a100_40g_nvlink,Qwen/Qwen2.5-1.5B,2.7750760252299664
+a10g_g5,Qwen/Qwen2.5-1.5B,1.6853273167113576
+l4_g6,Qwen/Qwen2.5-1.5B,1.3820856145311902
+l40s_g6e48,Qwen/Qwen2.5-1.5B,1.1048642633540524

@@ -18,7 +18,7 @@ def get_device_costs():
     """
     device_costs = {
         'p4d_a100_40g_nvlink': {'cost': None, 'gpus_per_node': 8},  # p4d.24xlarge has 8 A100 GPUs
-        'h100': {'cost': None, 'gpus_per_node': 8},  # p5.48xlarge has 8 H100 GPUs
+        'h100_p5': {'cost': None, 'gpus_per_node': 8},  # p5.48xlarge has 8 H100 GPUs
         'l40s_g6e48': {'cost': None, 'gpus_per_node': 8},  # g6e.48xlarge has 8 L40S GPUs
         'a10g_g5': {'cost': None, 'gpus_per_node': 8},  # g5.48xlarge has 8 A10G GPUs
         'l4_g6': {'cost': None, 'gpus_per_node': 8},  # g6.48xlarge has 8 L4 GPUs
@@ -27,7 +27,7 @@ def get_device_costs():
     # Instance type to device mapping
     instance_to_device = {
         'p4d.24xlarge': 'p4d_a100_40g_nvlink',
-        'p5.48xlarge': 'h100',
+        'p5.48xlarge': 'h100_p5',
         'g6e.48xlarge': 'l40s_g6e48',
         'g5.48xlarge': 'a10g_g5',
         'g6.48xlarge': 'l4_g6'
@@ -84,10 +84,15 @@ def get_device_costs():
 CONFIG_DIRS = [
     "/home/ec2-user/vidur-simulator/config_optimizer_output_qwen1.5_r1_r2_r4_r8_r16_a10g_g5/runs",
     "/home/ec2-user/vidur-simulator/config_optimizer_output_qwen1.5_r1_r2_r4_r8_r16_l4_g6/runs",
+    "/home/ec2-user/vidur-simulator/config_optimizer_output_qwen1.5_r1_r2_r4_r8_r16_a100_p4d/runs",
+    "/home/ec2-user/vidur-simulator/config_optimizer_output_qwen1.5_r1_r2_r4_r8_r16_h100_p5/runs",
+    "/home/ec2-user/vidur-simulator/config_optimizer_output_qwen1.5_r1_r2_r4_r8_r16_l40s_g6e48/runs",
     "/home/ec2-user/vidur-simulator/config_optimizer_output_llama_8b_r1_r2_r4_r8_r16_a10g_g5/runs",
     "/home/ec2-user/vidur-simulator/config_optimizer_output_llama_8b_r1_r2_r4_r8_r16_l4_g6/runs",
     "/home/ec2-user/vidur-simulator/config_optimizer_output_llama_8b_r1_r2_r4_r8_r16_a100_p4d/runs",
     "/home/ec2-user/vidur-simulator/config_optimizer_output_llama_8b_r1_r2_r4_r8_r16_h100_p5/runs",
+     "/home/ec2-user/vidur-simulator/config_optimizer_output_llama_8b_r1_r2_r4_r8_r16_l40s_g6e48/runs",
+   
 
 ]
 # Data structure to hold results
