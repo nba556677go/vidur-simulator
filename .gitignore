@@ -199,3 +199,6 @@ benchmarks/llm/vllm/latency/test
 test/
 
 */**.png
+
+#dont ignore .log files under /home/ec2-user/vidur-simulator/benchmarks/llm/vllm/latency/vllm_output/vidur_qps
+!benchmarks/llm/vllm/latency/vllm_output/vidur_qps/**/*.log
