@@ -503,6 +503,9 @@ class LLMBenchmark:
 
 
 async def main():
+    # Record script start time
+    script_start_time = time.time()
+    
     parser = argparse.ArgumentParser(description="vLLM Benchmarking Tool with Trace Support")
     
     # --- Input Source (Mutually Exclusive) ---
@@ -596,9 +599,16 @@ async def main():
             args =args
         )
         
-        # Initialize engine and run warmup
+        # Initialize engine and record timing
+        engine_init_start = time.time()
         await benchmark.initialize_engine()
+        engine_init_end = time.time()
+        engine_init_time = engine_init_end - script_start_time
+        
         await benchmark.run_warmup(args.warmup_requests)
+        
+        # Record actual processing start time (after warmup)
+        processing_start_time = time.time()
         
         if args.trace:
             await benchmark.run_benchmark(trace_path=args.trace)
@@ -644,6 +654,21 @@ async def main():
             
             gen_params = {"temperature": args.temperature, "top_p": args.top_p, "max_tokens": args.max_tokens}
             await benchmark.run_benchmark(prompts=prompts, gen_params=gen_params, concurrency=args.concurrency)
+        
+        # Record processing end and script end times
+        processing_end_time = time.time()
+        script_end_time = time.time()
+        
+        # Calculate and log timing metrics
+        actual_processing_time = processing_end_time - processing_start_time
+        total_script_time = script_end_time - script_start_time
+        
+        logger.info(f"=== Timing Summary ===")
+        logger.info(f"Script start time: {script_start_time:.3f}")
+        logger.info(f"Engine init time: {engine_init_time:.3f}s (from script start)")
+        logger.info(f"Actual processing time: {actual_processing_time:.3f}s (excluding warmup)")
+        logger.info(f"Script end time: {script_end_time:.3f}")
+        logger.info(f"Total script duration: {total_script_time:.3f}s")
         
         benchmark.print_results()
         benchmark.save_results_to_json(results_path)
